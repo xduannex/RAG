@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  rag-pdf-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - OLLAMA_HOST=http://ollama:11434
+      - DATABASE_URL=sqlite:///./storage/app.db
+      - PDF_STORAGE_PATH=/app/storage/pdfs
+      - CHROMA_DB_PATH=/app/storage/chroma
+    volumes:
+      - ./storage:/app/storage
+      - ./logs:/app/logs
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_ORIGINS=*
+    restart: unless-stopped
+
+volumes:
+  ollama_data:

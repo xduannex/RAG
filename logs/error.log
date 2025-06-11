@@ -1,0 +1,1 @@
+2025-06-09 15:12:50 - app.services.ollama_service - ERROR - ollama_service - health_check - Ollama health check error: 'dict' object has no attribute 'split'

@@ -1,0 +1,239 @@
+2025-06-09 14:40:12 - uvicorn.error - INFO - server - serve - Started server process [24740]
+2025-06-09 14:40:12 - uvicorn.error - INFO - on - startup - Waiting for application startup.
+2025-06-09 14:40:12 - app.main - INFO - main - lifespan - Starting RAG PDF Search API...
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _connection_begin_impl - BEGIN (implicit)
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_documents")
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA temp.table_info("pdf_documents")
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_chunks")
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA temp.table_info("pdf_chunks")
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("search_logs")
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA temp.table_info("search_logs")
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - 
+CREATE TABLE pdf_documents (
+	id INTEGER NOT NULL, 
+	filename VARCHAR(255) NOT NULL, 
+	file_path VARCHAR(500) NOT NULL, 
+	file_size INTEGER NOT NULL, 
+	file_hash VARCHAR(32) NOT NULL, 
+	title VARCHAR(500), 
+	author VARCHAR(255), 
+	subject VARCHAR(500), 
+	category VARCHAR(100), 
+	description TEXT, 
+	total_pages INTEGER, 
+	total_chunks INTEGER, 
+	processing_status VARCHAR(10), 
+	processing_error TEXT, 
+	processing_started_at DATETIME, 
+	processing_completed_at DATETIME, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP), 
+	updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP), 
+	is_searchable BOOLEAN, 
+	last_indexed_at DATETIME, 
+	PRIMARY KEY (id), 
+	UNIQUE (file_hash)
+)
+
+
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [no key 0.00006s] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - CREATE INDEX ix_pdf_documents_id ON pdf_documents (id)
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [no key 0.00006s] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - 
+CREATE TABLE pdf_chunks (
+	id INTEGER NOT NULL, 
+	pdf_id INTEGER NOT NULL, 
+	chunk_id VARCHAR(100) NOT NULL, 
+	page_number INTEGER NOT NULL, 
+	chunk_index INTEGER NOT NULL, 
+	position INTEGER, 
+	text_content TEXT NOT NULL, 
+	char_count INTEGER, 
+	word_count INTEGER, 
+	keywords TEXT, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP), 
+	PRIMARY KEY (id), 
+	UNIQUE (chunk_id)
+)
+
+
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [no key 0.00006s] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - CREATE INDEX ix_pdf_chunks_id ON pdf_chunks (id)
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [no key 0.00006s] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - CREATE INDEX ix_pdf_chunks_pdf_id ON pdf_chunks (pdf_id)
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [no key 0.00006s] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - 
+CREATE TABLE search_logs (
+	id INTEGER NOT NULL, 
+	"query" TEXT NOT NULL, 
+	category VARCHAR(100), 
+	pdf_ids TEXT, 
+	results_count INTEGER, 
+	processing_time FLOAT, 
+	user_id VARCHAR(100), 
+	ip_address VARCHAR(45), 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP), 
+	PRIMARY KEY (id)
+)
+
+
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [no key 0.00008s] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - CREATE INDEX ix_search_logs_id ON search_logs (id)
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [no key 0.00005s] ()
+2025-06-09 14:40:12 - sqlalchemy.engine.Engine - INFO - base - _connection_commit_impl - COMMIT
+2025-06-09 14:40:12 - app.main - INFO - main - lifespan - Database tables created successfully
+2025-06-09 14:40:13 - watchfiles.main - INFO - main - _log_changes - 6 changes detected
+2025-06-09 14:40:13 - httpx - INFO - _client - _send_single_request - HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+2025-06-09 14:40:13 - app.services.ollama_service - WARNING - ollama_service - health_check - Model llama2 not found. Available models: ['llama4:maverick', 'gemma3:latest', 'llama4:latest']
+2025-06-09 14:40:13 - app.main - WARNING - main - lifespan - Ollama service is not responding properly
+2025-06-09 14:40:13 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 14:40:13 - app.services.vector_store - INFO - vector_store - _initialize_collection - Initialized collection: pdf_chunks
+2025-06-09 14:40:13 - app.main - INFO - main - lifespan - Vector store initialized with 0 chunks
+2025-06-09 14:40:13 - app.main - INFO - main - lifespan - Application startup completed
+2025-06-09 14:40:13 - uvicorn.error - INFO - on - startup - Application startup complete.
+2025-06-09 14:40:13 - watchfiles.main - INFO - main - _log_changes - 4 changes detected
+2025-06-09 14:40:26 - watchfiles.main - INFO - main - _log_changes - 5 changes detected
+2025-06-09 14:40:37 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 14:40:41 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 14:40:57 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 14:42:17 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 14:59:37 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:00:07 - watchfiles.main - INFO - main - _log_changes - 3 changes detected
+2025-06-09 15:00:13 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:00:17 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:00:20 - uvicorn.error - INFO - server - shutdown - Shutting down
+2025-06-09 15:00:20 - uvicorn.error - INFO - on - shutdown - Waiting for application shutdown.
+2025-06-09 15:00:20 - app.main - INFO - main - lifespan - Shutting down RAG PDF Search API...
+2025-06-09 15:00:20 - uvicorn.error - INFO - on - shutdown - Application shutdown complete.
+2025-06-09 15:00:20 - uvicorn.error - INFO - server - serve - Finished server process [24740]
+2025-06-09 15:00:24 - uvicorn.error - INFO - server - serve - Started server process [28080]
+2025-06-09 15:00:24 - uvicorn.error - INFO - on - startup - Waiting for application startup.
+2025-06-09 15:00:24 - app.main - INFO - main - lifespan - Starting RAG PDF Search API...
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _connection_begin_impl - BEGIN (implicit)
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_documents")
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_chunks")
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("search_logs")
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:00:24 - sqlalchemy.engine.Engine - INFO - base - _connection_commit_impl - COMMIT
+2025-06-09 15:00:24 - app.main - INFO - main - lifespan - Database tables created successfully
+2025-06-09 15:00:24 - httpx - INFO - _client - _send_single_request - HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+2025-06-09 15:00:24 - app.services.ollama_service - WARNING - ollama_service - health_check - Embedding model nomic-embed-text not found
+2025-06-09 15:00:24 - app.main - WARNING - main - lifespan - Ollama service is not responding properly
+2025-06-09 15:00:24 - app.services.vector_store - INFO - vector_store - _initialize_collection - Initialized collection: pdf_chunks
+2025-06-09 15:00:24 - app.main - INFO - main - lifespan - Vector store initialized with 0 chunks
+2025-06-09 15:00:24 - app.main - INFO - main - lifespan - Application startup completed
+2025-06-09 15:00:24 - uvicorn.error - INFO - on - startup - Application startup complete.
+2025-06-09 15:00:24 - watchfiles.main - INFO - main - _log_changes - 3 changes detected
+2025-06-09 15:00:37 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:00:39 - watchfiles.main - INFO - main - _log_changes - 6 changes detected
+2025-06-09 15:00:39 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:00:57 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:01:15 - uvicorn.error - INFO - server - shutdown - Shutting down
+2025-06-09 15:01:15 - uvicorn.error - INFO - on - shutdown - Waiting for application shutdown.
+2025-06-09 15:01:15 - app.main - INFO - main - lifespan - Shutting down RAG PDF Search API...
+2025-06-09 15:01:15 - uvicorn.error - INFO - on - shutdown - Application shutdown complete.
+2025-06-09 15:01:15 - uvicorn.error - INFO - server - serve - Finished server process [28080]
+2025-06-09 15:02:58 - uvicorn.error - INFO - server - serve - Started server process [28184]
+2025-06-09 15:02:58 - uvicorn.error - INFO - on - startup - Waiting for application startup.
+2025-06-09 15:02:58 - app.main - INFO - main - lifespan - Starting RAG PDF Search API...
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _connection_begin_impl - BEGIN (implicit)
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_documents")
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_chunks")
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("search_logs")
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:02:58 - sqlalchemy.engine.Engine - INFO - base - _connection_commit_impl - COMMIT
+2025-06-09 15:02:58 - app.main - INFO - main - lifespan - Database tables created successfully
+2025-06-09 15:02:58 - httpx - INFO - _client - _send_single_request - HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+2025-06-09 15:02:58 - app.services.ollama_service - WARNING - ollama_service - health_check - Embedding model nomic-embed-text not found
+2025-06-09 15:02:58 - app.main - WARNING - main - lifespan - Ollama service is not responding properly
+2025-06-09 15:02:59 - app.services.vector_store - INFO - vector_store - _initialize_collection - Initialized collection: pdf_chunks
+2025-06-09 15:02:59 - app.main - INFO - main - lifespan - Vector store initialized with 0 chunks
+2025-06-09 15:02:59 - app.main - INFO - main - lifespan - Application startup completed
+2025-06-09 15:02:59 - uvicorn.error - INFO - on - startup - Application startup complete.
+2025-06-09 15:02:59 - watchfiles.main - INFO - main - _log_changes - 3 changes detected
+2025-06-09 15:06:08 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:09:14 - watchfiles.main - INFO - main - _log_changes - 4 changes detected
+2025-06-09 15:09:15 - watchfiles.main - INFO - main - _log_changes - 1 change detected
+2025-06-09 15:10:01 - uvicorn.access - INFO - httptools_impl - send - 127.0.0.1:60935 - "GET / HTTP/1.1" 200
+2025-06-09 15:10:01 - uvicorn.access - INFO - httptools_impl - send - 127.0.0.1:60935 - "GET /favicon.ico HTTP/1.1" 404
+2025-06-09 15:10:07 - uvicorn.access - INFO - httptools_impl - send - 127.0.0.1:60936 - "GET /docs HTTP/1.1" 200
+2025-06-09 15:10:07 - uvicorn.access - INFO - httptools_impl - send - 127.0.0.1:60936 - "GET /openapi.json HTTP/1.1" 200
+2025-06-09 15:12:48 - watchfiles.main - INFO - main - _log_changes - 7 changes detected
+2025-06-09 15:12:48 - uvicorn.error - INFO - server - shutdown - Shutting down
+2025-06-09 15:12:48 - uvicorn.error - INFO - on - shutdown - Waiting for application shutdown.
+2025-06-09 15:12:48 - app.main - INFO - main - lifespan - Shutting down RAG PDF Search API...
+2025-06-09 15:12:48 - uvicorn.error - INFO - on - shutdown - Application shutdown complete.
+2025-06-09 15:12:48 - uvicorn.error - INFO - server - serve - Finished server process [28184]
+2025-06-09 15:12:49 - watchfiles.main - INFO - main - _log_changes - 2 changes detected
+2025-06-09 15:12:49 - watchfiles.main - INFO - main - _log_changes - 5 changes detected
+2025-06-09 15:12:49 - uvicorn.error - INFO - server - serve - Started server process [23828]
+2025-06-09 15:12:49 - uvicorn.error - INFO - on - startup - Waiting for application startup.
+2025-06-09 15:12:49 - app.main - INFO - main - lifespan - Starting RAG PDF Search API...
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _connection_begin_impl - BEGIN (implicit)
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_documents")
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_chunks")
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("search_logs")
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:12:49 - sqlalchemy.engine.Engine - INFO - base - _connection_commit_impl - COMMIT
+2025-06-09 15:12:49 - app.main - INFO - main - lifespan - Database tables created successfully
+2025-06-09 15:12:50 - watchfiles.main - INFO - main - _log_changes - 6 changes detected
+2025-06-09 15:12:50 - httpx - INFO - _client - _send_single_request - HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+2025-06-09 15:12:50 - app.services.ollama_service - ERROR - ollama_service - health_check - Ollama health check error: 'dict' object has no attribute 'split'
+2025-06-09 15:12:50 - app.main - WARNING - main - lifespan - Ollama service is not responding properly
+2025-06-09 15:12:50 - app.services.vector_store - INFO - vector_store - _initialize_collection - Initialized collection: pdf_chunks
+2025-06-09 15:12:50 - app.main - INFO - main - lifespan - Vector store initialized with 0 chunks
+2025-06-09 15:12:50 - app.main - INFO - main - lifespan - Application startup completed
+2025-06-09 15:12:50 - uvicorn.error - INFO - on - startup - Application startup complete.
+2025-06-09 15:12:50 - watchfiles.main - INFO - main - _log_changes - 3 changes detected
+2025-06-09 15:13:15 - watchfiles.main - INFO - main - _log_changes - 2 changes detected
+2025-06-09 15:14:55 - watchfiles.main - INFO - main - _log_changes - 10 changes detected
+2025-06-09 15:14:55 - uvicorn.error - INFO - server - shutdown - Shutting down
+2025-06-09 15:14:55 - uvicorn.error - INFO - on - shutdown - Waiting for application shutdown.
+2025-06-09 15:14:55 - app.main - INFO - main - lifespan - Shutting down RAG PDF Search API...
+2025-06-09 15:14:55 - uvicorn.error - INFO - on - shutdown - Application shutdown complete.
+2025-06-09 15:14:55 - uvicorn.error - INFO - server - serve - Finished server process [23828]
+2025-06-09 15:14:56 - watchfiles.main - INFO - main - _log_changes - 3 changes detected
+2025-06-09 15:14:56 - watchfiles.main - INFO - main - _log_changes - 5 changes detected
+2025-06-09 15:14:56 - uvicorn.error - INFO - server - serve - Started server process [27752]
+2025-06-09 15:14:56 - uvicorn.error - INFO - on - startup - Waiting for application startup.
+2025-06-09 15:14:56 - app.main - INFO - main - lifespan - Starting RAG PDF Search API...
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _connection_begin_impl - BEGIN (implicit)
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_documents")
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("pdf_chunks")
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _execute_context - PRAGMA main.table_info("search_logs")
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _execute_context - [raw sql] ()
+2025-06-09 15:14:56 - sqlalchemy.engine.Engine - INFO - base - _connection_commit_impl - COMMIT
+2025-06-09 15:14:56 - app.main - INFO - main - lifespan - Database tables created successfully
+2025-06-09 15:14:57 - watchfiles.main - INFO - main - _log_changes - 6 changes detected
+2025-06-09 15:14:57 - httpx - INFO - _client - _send_single_request - HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+2025-06-09 15:14:57 - app.services.ollama_service - INFO - ollama_service - health_check - Raw models data: {'models': [{'name': 'nomic-embed-text:latest', 'model': 'nomic-embed-text:latest', 'modified_at': '2025-06-09T15:02:52.7358864+08:00', 'size': 274302450, 'digest': '0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f', 'details': {'parent_model': '', 'format': 'gguf', 'family': 'nomic-bert', 'families': ['nomic-bert'], 'parameter_size': '137M', 'quantization_level': 'F16'}}, {'name': 'qwen2.5:7b', 'model': 'qwen2.5:7b', 'modified_at': '2025-06-09T14:51:28.7799911+08:00', 'size': 4683087332, 'digest': '845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e', 'details': {'parent_model': '', 'format': 'gguf', 'family': 'qwen2', 'families': ['qwen2'], 'parameter_size': '7.6B', 'quantization_level': 'Q4_K_M'}}, {'name': 'llama4:maverick', 'model': 'llama4:maverick', 'modified_at': '2025-06-07T02:14:56.7621333+08:00', 'size': 244844103487, 'digest': '463460ce40048e8fc10f22a20270321cb9cf89baef3ddd986d15ad6718e6edce', 'details': {'parent_model': '', 'format': 'gguf', 'family': 'llama4', 'families': ['llama4'], 'parameter_size': '401.6B', 'quantization_level': 'Q4_K_M'}}, {'name': 'gemma3:latest', 'model': 'gemma3:latest', 'modified_at': '2025-06-06T17:37:26.9308672+08:00', 'size': 3338801804, 'digest': 'a2af6cc3eb7fa8be8504abaf9b04e88f17a119ec3f04a3addf55f92841195f5a', 'details': {'parent_model': '', 'format': 'gguf', 'family': 'gemma3', 'families': ['gemma3'], 'parameter_size': '4.3B', 'quantization_level': 'Q4_K_M'}}, {'name': 'llama4:latest', 'model': 'llama4:latest', 'modified_at': '2025-06-06T17:05:50.3135136+08:00', 'size': 67436862345, 'digest': 'fff25efaabd40c1db5e1a9dff819958a23483fc6e279de9501a060028b26405d', 'details': {'parent_model': '', 'format': 'gguf', 'family': 'llama4', 'families': ['llama4'], 'parameter_size': '108.6B', 'quantization_level': 'Q4_K_M'}}]}
+2025-06-09 15:14:57 - app.services.ollama_service - INFO - ollama_service - health_check - Available models: ['nomic-embed-text:latest', 'nomic-embed-text', 'qwen2.5:7b', 'qwen2.5', 'llama4:maverick', 'llama4', 'gemma3:latest', 'gemma3', 'llama4:latest', 'llama4']
+2025-06-09 15:14:57 - app.services.ollama_service - INFO - ollama_service - health_check - Looking for main model: qwen2.5:7b
+2025-06-09 15:14:57 - app.services.ollama_service - INFO - ollama_service - health_check - Looking for embedding model: nomic-embed-text
+2025-06-09 15:14:57 - app.main - INFO - main - lifespan - Ollama service is healthy
+2025-06-09 15:14:57 - app.services.vector_store - INFO - vector_store - _initialize_collection - Initialized collection: pdf_chunks
+2025-06-09 15:14:57 - app.main - INFO - main - lifespan - Vector store initialized with 0 chunks
+2025-06-09 15:14:57 - app.main - INFO - main - lifespan - Application startup completed
+2025-06-09 15:14:57 - uvicorn.error - INFO - on - startup - Application startup complete.
+2025-06-09 15:14:57 - watchfiles.main - INFO - main - _log_changes - 3 changes detected
+2025-06-09 15:15:09 - watchfiles.main - INFO - main - _log_changes - 2 changes detected
+2025-06-09 15:20:36 - watchfiles.main - INFO - main - _log_changes - 12 changes detected
+2025-06-09 15:20:36 - uvicorn.error - INFO - server - shutdown - Shutting down
+2025-06-09 15:20:36 - uvicorn.error - INFO - on - shutdown - Waiting for application shutdown.
+2025-06-09 15:20:36 - app.main - INFO - main - lifespan - Shutting down RAG PDF Search API...
+2025-06-09 15:20:36 - uvicorn.error - INFO - on - shutdown - Application shutdown complete.
+2025-06-09 15:20:36 - uvicorn.error - INFO - server - serve - Finished server process [27752]
+2025-06-09 15:20:37 - watchfiles.main - INFO - main - _log_changes - 14 changes detected

@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG PDF Search - Chat Interface</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid h-100">
+        <div class="row h-100">
+            <!-- Sidebar -->
+            <div class="col-md-3 sidebar">
+                <div class="sidebar-header">
+                    <h4><i class="fas fa-robot"></i> RAG Chat</h4>
+                    <div class="status-indicator" id="statusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Connecting...</span>
+                    </div>
+                </div>
+
+                <!-- Single Upload Section -->
+                <div class="upload-section">
+                    <h6><i class="fas fa-upload"></i> Single Upload</h6>
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        <div class="mb-2">
+                            <input type="file" class="form-control form-control-sm" id="fileInput" accept=".pdf,.doc,.docx" required>
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" id="titleInput" placeholder="Title (optional)">
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" id="categoryInput" placeholder="Category (optional)">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            <i class="fas fa-upload"></i> Upload
+                        </button>
+                    </form>
+                    <div id="uploadProgress" class="mt-2" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bulk Upload Section -->
+                <div class="upload-section">
+                    <h6><i class="fas fa-cloud-upload-alt"></i> Bulk Upload</h6>
+                    <form id="bulkUploadForm" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <input type="file" class="form-control form-control-sm" id="bulkFileInput"
+                                   accept=".pdf,.doc,.docx" multiple required>
+                            <div class="form-text">Select multiple PDF, DOC, or DOCX files (max 50)</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <input type="text" class="form-control form-control-sm" id="bulkCategoryInput"
+                                   placeholder="Category (optional)">
+                        </div>
+
+                        <div class="mb-3">
+                            <textarea class="form-control form-control-sm" id="bulkDescriptionInput"
+                                      placeholder="Description (optional)" rows="2"></textarea>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="autoProcessCheck" checked>
+                            <label class="form-check-label" for="autoProcessCheck">
+                                Auto-process files
+                            </label>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="app.previewBulkUpload()">
+                                <i class="fas fa-eye"></i> Preview Files
+                            </button>
+
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="fas fa-cloud-upload-alt"></i> Upload All
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Bulk Upload Progress -->
+                    <div id="bulkUploadProgress" style="display: none;" class="mt-3">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="fw-bold">Bulk Upload Progress</small>
+                                    <small id="bulkProgressText" class="text-muted">0%</small>
+                                </div>
+                            </div>
+                            <div class="card-body py-2">
+                                <div class="progress mb-2" style="height: 8px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                         id="bulkProgressBar" style="width: 0%"></div>
+                                </div>
+                                <div id="bulkCurrentFile" class="small text-muted mb-2"></div>
+                                <div id="bulkUploadResults"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PDF List -->
+                <div class="pdf-list">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6><i class="fas fa-file-pdf"></i> Documents</h6>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="app.loadPDFs()" title="Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <div id="pdfList" class="pdf-items">
+                        <div class="text-muted small">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-section">
+                    <h6><i class="fas fa-chart-bar"></i> Stats</h6>
+                    <div id="statsContainer">
+                        <div class="stat-item">
+                            <span class="stat-label">Total PDFs:</span>
+                             <span class="stat-value" id="totalPdfs">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Searchable:</span>
+                            <span class="stat-value" id="searchablePdfs">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total Searches:</span>
+                            <span class="stat-value" id="totalSearches">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Processing:</span>
+                            <span class="stat-value" id="processingPdfs">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Chat Area -->
+            <div class="col-md-9 chat-area">
+                <div class="chat-header">
+                    <h5><i class="fas fa-comments"></i> RAG Assistant</h5>
+                    <div class="chat-controls">
+                        <button class="btn btn-outline-secondary btn-sm" id="clearChat">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                        <button class="btn btn-outline-info btn-sm" id="refreshStats">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                        <button class="btn btn-outline-success btn-sm" onclick="app.showUploadHistory()">
+                            <i class="fas fa-history"></i> History
+                        </button>
+                    </div>
+                </div>
+
+                <div class="chat-container" id="chatContainer">
+                    <div class="welcome-message">
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> Welcome to RAG PDF Search!</h6>
+                            <p class="mb-2">You can:</p>
+                            <ul class="mb-0">
+                                <li>Upload single PDF documents or bulk upload multiple files</li>
+                                <li>Ask questions about your documents using RAG</li>
+                                <li>Search for specific content across all documents</li>
+                                <li>Get AI-powered answers with source citations</li>
+                                <li>Preview files before bulk uploading</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <form id="chatForm" class="chat-input-form">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="messageInput"
+                                   placeholder="Ask a question about your documents..."
+                                   autocomplete="off" required>
+                            <button class="btn btn-primary" type="submit" id="sendButton">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+                    <div class="chat-options">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="queryType" id="ragMode" value="rag" checked>
+                            <label class="form-check-label" for="ragMode">
+                                <i class="fas fa-brain"></i> RAG Query
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="queryType" id="searchMode" value="search">
+                            <label class="form-check-label" for="searchMode">
+                                <i class="fas fa-search"></i> Search Only
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Upload Preview Modal -->
+    <div class="modal fade" id="bulkPreviewModal" tabindex="-1" aria-labelledby="bulkPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bulkPreviewModalLabel">
+                        <i class="fas fa-eye"></i> Bulk Upload Preview
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="bulkPreviewContent">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Analyzing files...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="app.confirmBulkUpload()" id="confirmBulkUploadBtn">
+                        <i class="fas fa-cloud-upload-alt"></i> Proceed with Upload
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload History Modal -->
+    <div class="modal fade" id="uploadHistoryModal" tabindex="-1" aria-labelledby="uploadHistoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="uploadHistoryModalLabel">
+                        <i class="fas fa-history"></i> Upload History
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="uploadHistoryContent">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading upload history...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" onclick="app.clearUploadHistory()">
+                        <i class="fas fa-trash"></i> Clear History
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Details Modal -->
+    <div class="modal fade" id="fileDetailsModal" tabindex="-1" aria-labelledby="fileDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="fileDetailsModalLabel">
+                        <i class="fas fa-file-alt"></i> File Details
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="fileDetailsContent"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                    <button type="button" class="btn btn-primary" id="reprocessFileBtn" onclick="app.reprocessFile()">
+                        <i class="fas fa-redo"></i> Reprocess
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="deleteFileBtn" onclick="app.deleteFile()">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="fas fa-info-circle text-primary me-2"></i>
+                <strong class="me-auto">Notification</strong>
+                <small class="text-muted" id="toastTime"></small>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastBody"></div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="spinner-border text-light" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="text-light mt-3" id="loadingText">Processing...</p>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmationModalLabel">
+                        <i class="fas fa-question-circle"></i> Confirm Action
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmationMessage">Are you sure you want to proceed?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" class="btn btn-danger" id="confirmActionBtn">
+                        <i class="fas fa-check"></i> Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="errorModalLabel">
+                        <i class="fas fa-exclamation-triangle"></i> Error
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="errorContent">
+                        <p class="mb-3">An error occurred while processing your request.</p>
+                        <div class="alert alert-danger" id="errorDetails"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="app.reportError()">
+                        <i class="fas fa-bug"></i> Report Issue
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="successModalLabel">
+                        <i class="fas fa-check-circle"></i> Success
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="successContent">
+                        <p class="mb-0">Operation completed successfully!</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                        <i class="fas fa-check"></i> OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Help -->
+    <div class="position-fixed bottom-0 start-0 p-3">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#shortcutsModal" title="Keyboard Shortcuts">
+            <i class="fas fa-keyboard"></i>
+        </button>
+    </div>
+
+    <!-- Shortcuts Modal -->
+    <div class="modal fade" id="shortcutsModal" tabindex="-1" aria-labelledby="shortcutsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="shortcutsModalLabel">
+                        <i class="fas fa-keyboard"></i> Keyboard Shortcuts
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <h6>Chat Controls</h6>
+                            <ul class="list-unstyled">
+                                <li><kbd>Enter</kbd> - Send message</li>
+                                <li><kbd>Shift + Enter</kbd> - New line</li>
+                                <li><kbd>Ctrl + L</kbd> - Clear chat</li>
+                                <li><kbd>Ctrl + R</kbd> - Refresh stats</li>
+                            </ul>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <h6>Upload Controls</h6>
+                            <ul class="list-unstyled">
+                                <li><kbd>Ctrl + U</kbd> - Focus single upload</li>
+                                <li><kbd>Ctrl + Shift + U</kbd> - Focus bulk upload</li>
+                                <li><kbd>Ctrl + P</kbd> - Preview bulk upload</li>
+                            </ul>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <h6>Navigation</h6>
+                            <ul class="list-unstyled">
+                                <li><kbd>Ctrl + H</kbd> - Show upload history</li>
+                                <li><kbd>Ctrl + /</kbd> - Show this help</li>
+                                <li><kbd>Esc</kbd> - Close modals</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Status Banner -->
+    <div id="connectionBanner" class="alert alert-warning alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x"
+         style="display: none; z-index: 9999; margin-top: 20px;">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Connection Issue:</strong> <span id="connectionMessage">Unable to connect to server</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <!-- File Drop Zone Overlay -->
+    <div id="dropZone" class="drop-zone-overlay" style="display: none;">
+        <div class="drop-zone-content">
+            <i class="fas fa-cloud-upload-alt fa-5x text-primary mb-3"></i>
+            <h3>Drop files here to upload</h3>
+            <p class="text-muted">Supports PDF, DOC, and DOCX files</p>
+        </div>
+    </div>
+
+    <!-- Custom Styles -->
+    <style>
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9998;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading-content {
+            text-align: center;
+        }
+
+        .drop-zone-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 123, 255, 0.1);
+            border: 3px dashed #007bff;
+            z-index: 9997;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .drop-zone-content {
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .upload-section {
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .upload-section:last-of-type {
+            border-bottom: none;
+        }
+
+        .progress-bar-animated {
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+
+        @keyframes progress-bar-stripes {
+            0% {
+                background-position: 1rem 0;
+            }
+            100% {
+                background-position: 0 0;
+            }
+        }
+
+        .file-item {
+            transition: all 0.2s ease;
+        }
+
+        .file-item:hover {
+            background-color: rgba(0, 123, 255, 0.1);
+            transform: translateX(2px);
+        }
+
+        .status-indicator .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .status-indicator.connected .status-dot {
+            background-color: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.disconnected .status-dot {
+            background-color: #dc3545;
+        }
+
+        .status-indicator.connecting .status-dot {
+            background-color: #ffc107;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .chat-message {
+            margin-bottom: 1rem;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .sidebar {
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+
+        .chat-container {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .pdf-items {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* Custom scrollbar */
+        .sidebar::-webkit-scrollbar,
+        .chat-container::-webkit-scrollbar,
+        .pdf-items::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track,
+        .chat-container::-webkit-scrollbar-track,
+        .pdf-items::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb,
+        .chat-container::-webkit-scrollbar-thumb,
+        .pdf-items::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover,
+        .chat-container::-webkit-scrollbar-thumb:hover,
+        .pdf-items::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -100%;
+                width: 80%;
+                height: 100vh;
+                background: white;
+                z-index: 1000;
+                transition: left 0.3s ease;
+                box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            }
+
+            .sidebar.show {
+                left: 0;
+            }
+
+            .chat-area {
+                width: 100%;
+            }
+
+            .modal-dialog {
+                margin: 1rem;
+            }
+        }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #1a1a1a;
+                color: #ffffff;
+            }
+
+            .sidebar {
+                background-color: #2d2d2d;
+                border-right: 1px solid #404040;
+            }
+
+            .modal-content {
+                background-color: #2d2d2d;
+                color: #ffffff;
+            }
+
+            .form-control {
+                background-color: #404040;
+                border-color: #555555;
+                color: #ffffff;
+            }
+
+            .form-control:focus {
+                background-color: #404040;
+                border-color: #007bff;
+                color: #ffffff;
+            }
+        }
+    </style>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/app.js"></script>
+
+    <!-- Initialize App -->
+    <script>
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize the RAG Chat App
+            window.app = new RAGChatApp();
+            window.app.init();
+
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Ctrl + L - Clear chat
+                if (e.ctrlKey && e.key === 'l') {
+                    e.preventDefault();
+                    window.app.clearChat();
+                }
+
+                // Ctrl + R - Refresh stats
+                if (e.ctrlKey && e.key === 'r') {
+                    e.preventDefault();
+                    window.app.loadStats();
+                }
+
+                // Ctrl + U - Focus single upload
+                if (e.ctrlKey && e.key === 'u' && !e.shiftKey) {
+                    e.preventDefault();
+                    document.getElementById('fileInput').focus();
+                }
+
+                // Ctrl + Shift + U - Focus bulk upload
+                if (e.ctrlKey && e.shift
