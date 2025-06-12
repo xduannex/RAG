@@ -123,7 +123,7 @@
                     <div id="statsContainer">
                         <div class="stat-item">
                             <span class="stat-label">Total PDFs:</span>
-                             <span class="stat-value" id="totalPdfs">-</span>
+                            <span class="stat-value" id="totalPdfs">-</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">Searchable:</span>
@@ -268,7 +268,7 @@
         </div>
     </div>
 
-    <!-- File Details Modal -->
+        <!-- File Details Modal -->
     <div class="modal fade" id="fileDetailsModal" tabindex="-1" aria-labelledby="fileDetailsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -587,6 +587,90 @@
             }
         }
 
+        .typing-animation {
+            display: flex;
+            align-items: center;
+        }
+
+        .typing-animation span {
+            height: 8px;
+            width: 8px;
+            background-color: #999;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            animation: typing 1.5s infinite;
+        }
+
+        .typing-animation span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-animation span:nth-child(3) {
+            animation-delay: 0.4s;
+            margin-right: 0;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.5;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+
+        .message-bubble {
+            position: relative;
+            word-wrap: break-word;
+        }
+
+        .message-bubble::before {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            top: 15px;
+        }
+
+        .message-bubble.bg-primary::before {
+            right: -8px;
+            border-left: 8px solid #0d6efd;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+        }
+
+        .message-bubble.bg-light::before {
+            left: -8px;
+            border-right: 8px solid #f8f9fa;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+        }
+
+        .source-item {
+            transition: all 0.2s ease;
+        }
+
+        .source-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .result-item {
+            transition: all 0.2s ease;
+        }
+
+                .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .cursor-pointer {
+            cursor: pointer;
+        }
+
         .sidebar {
             max-height: 100vh;
             overflow-y: auto;
@@ -653,6 +737,18 @@
             .modal-dialog {
                 margin: 1rem;
             }
+
+            .message-bubble {
+                max-width: 90% !important;
+            }
+
+            .chat-input-container {
+                padding: 1rem;
+            }
+
+            .sidebar {
+                padding: 1rem;
+            }
         }
 
         /* Dark mode support */
@@ -684,39 +780,265 @@
                 color: #ffffff;
             }
         }
+
+        /* Focus states for accessibility */
+        .btn:focus,
+        .form-control:focus,
+        .form-select:focus {
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+
+        /* Loading states */
+        .btn.loading {
+            position: relative;
+            color: transparent !important;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            top: 50%;
+            left: 50%;
+            margin-left: -8px;
+            margin-top: -8px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Additional utility classes */
+        .text-truncate-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .text-truncate-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Status badges */
+        .badge.bg-processing {
+            background-color: #ffc107 !important;
+            color: #000;
+        }
+
+        .badge.bg-processed {
+            background-color: #28a745 !important;
+        }
+
+        .badge.bg-failed {
+            background-color: #dc3545 !important;
+        }
+
+        .badge.bg-uploaded {
+            background-color: #17a2b8 !important;
+        }
+
+        /* Chat message improvements */
+        .chat-message .message-content {
+            line-height: 1.5;
+        }
+
+        .chat-message .message-content pre {
+            background-color: rgba(0,0,0,0.1);
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            overflow-x: auto;
+        }
+
+        .chat-message .message-content code {
+            background-color: rgba(0,0,0,0.1);
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+
+        /* File upload drag states */
+        .file-input-drag-over {
+            border-color: #007bff !important;
+            background-color: rgba(0, 123, 255, 0.1) !important;
+        }
+
+        /* Progress bar enhancements */
+        .progress-bar-success {
+            background-color: #28a745;
+        }
+
+        .progress-bar-warning {
+            background-color: #ffc107;
+        }
+
+        .progress-bar-danger {
+            background-color: #dc3545;
+        }
+
+        /* Mobile menu toggle */
+        .mobile-menu-toggle {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-menu-toggle {
+                display: block;
+                position: fixed;
+                top: 1rem;
+                left: 1rem;
+                z-index: 1001;
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 0.25rem;
+                padding: 0.5rem;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+        }
     </style>
+
+    <!-- Mobile Menu Toggle (for responsive design) -->
+    <button class="mobile-menu-toggle btn" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+    </button>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/app.js"></script>
 
-    <!-- Initialize App -->
+    <!-- Additional JavaScript for mobile responsiveness -->
     <script>
-        // Initialize the app when DOM is loaded
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.classList.toggle('show');
+        }
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.querySelector('.sidebar');
+            const toggleBtn = document.querySelector('.mobile-menu-toggle');
+
+            if (window.innerWidth <= 768 &&
+                !sidebar.contains(event.target) &&
+                !toggleBtn.contains(event.target) &&
+                sidebar.classList.contains('show')) {
+                sidebar.classList.remove('show');
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            const sidebar = document.querySelector('.sidebar');
+            if (window.innerWidth > 768) {
+                sidebar.classList.remove('show');
+            }
+        });
+
+        // Enhanced keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl + Shift + U - Focus bulk upload
+            if (e.ctrlKey && e.shiftKey && e.key === 'U') {
+                e.preventDefault();
+                document.getElementById('bulkFileInput')?.focus();
+            }
+
+            // Ctrl + P - Preview bulk upload
+            if (e.ctrlKey && e.key === 'p') {
+                e.preventDefault();
+                if (window.app) {
+                    window.app.previewBulkUpload();
+                }
+            }
+
+            // Ctrl + H - Show upload history
+            if (e.ctrlKey && e.key === 'h') {
+                e.preventDefault();
+                if (window.app) {
+                    window.app.showUploadHistory();
+                }
+            }
+
+            // Ctrl + / - Show keyboard shortcuts
+            if (e.ctrlKey && e.key === '/') {
+                e.preventDefault();
+                const shortcutsModal = document.getElementById('shortcutsModal');
+                if (shortcutsModal && typeof bootstrap !== 'undefined') {
+                    new bootstrap.Modal(shortcutsModal).show();
+                }
+            }
+
+            // Esc - Close modals
+            if (e.key === 'Escape') {
+                const modals = document.querySelectorAll('.modal.show');
+                modals.forEach(modal => {
+                    if (typeof bootstrap !== 'undefined') {
+                        bootstrap.Modal.getInstance(modal)?.hide();
+                    }
+                });
+            }
+        });
+
+        // Enable tooltips and popovers when DOM is loaded
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize the RAG Chat App
-            window.app = new RAGChatApp();
-            window.app.init();
+            // Enable tooltips
+            if (typeof bootstrap !== 'undefined') {
+                const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                tooltipTriggerList.map(function (tooltipTriggerEl) {
+                    return new bootstrap.Tooltip(tooltipTriggerEl);
+                });
 
-            // Add keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                // Ctrl + L - Clear chat
-                if (e.ctrlKey && e.key === 'l') {
-                    e.preventDefault();
-                    window.app.clearChat();
+                // Enable popovers
+                const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+                popoverTriggerList.map(function (popoverTriggerEl) {
+                    return new bootstrap.Popover(popoverTriggerEl);
+                });
+            }
+        });
+
+        // Service Worker Registration (Optional)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch((registrationError) => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+
+        // Performance monitoring
+        if ('performance' in window) {
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    const perfData = performance.getEntriesByType('navigation')[0];
+                    console.log('Page load time:', perfData.loadEventEnd - perfData.loadEventStart, 'ms');
+                }, 0);
+            });
+        }
+
+        // Memory usage monitoring (for development)
+        if ('memory' in performance) {
+            setInterval(() => {
+                const memInfo = performance.memory;
+                if (memInfo.usedJSHeapSize > memInfo.jsHeapSizeLimit * 0.9) {
+                    console.warn('High memory usage detected');
                 }
+            }, 30000);
+        }
+    </script>
+</body>
+</html>
 
-                // Ctrl + R - Refresh stats
-                if (e.ctrlKey && e.key === 'r') {
-                    e.preventDefault();
-                    window.app.loadStats();
-                }
-
-                // Ctrl + U - Focus single upload
-                if (e.ctrlKey && e.key === 'u' && !e.shiftKey) {
-                    e.preventDefault();
-                    document.getElementById('fileInput').focus();
-                }
-
-                // Ctrl + Shift + U - Focus bulk upload
-                if (e.ctrlKey && e.shift

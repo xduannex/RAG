@@ -1,5 +1,4 @@
 import datetime
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/health")
+@router.get("/")
 async def health_check():
     """Simple health check endpoint"""
     try:
@@ -33,23 +32,41 @@ async def health_check():
         # Determine overall status
         overall_status = "healthy" if db_status == "healthy" else "unhealthy"
 
-        return {
+        response_data = {
             "status": overall_status,
             "database": db_status,
             "database_error": db_error,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
+
+        # Return appropriate HTTP status code
+        if overall_status == "unhealthy":
+            from fastapi import HTTPException
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=503,  # Service Unavailable
+                content=response_data
+            )
+
+        return response_data
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return {
+        error_response = {
             "status": "unhealthy",
             "database": "unhealthy",
             "database_error": str(e),
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,  # Service Unavailable
+            content=error_response
+        )
 
-@router.get("/health/detailed")
+
+@router.get("/detailed")
 async def detailed_health_check(db: Session = Depends(get_db)):
     """Detailed health check including all services"""
     health_status = {
@@ -60,7 +77,8 @@ async def detailed_health_check(db: Session = Depends(get_db)):
 
     # Check database connection
     try:
-        db.execute("SELECT 1")
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
         health_status["services"]["database"] = {"status": "healthy"}
     except Exception as e:
         health_status["services"]["database"] = {"status": "unhealthy", "error": str(e)}
@@ -92,7 +110,6 @@ async def detailed_health_check(db: Session = Depends(get_db)):
         health_status["services"]["vector_store"] = {"status": "unhealthy", "error": str(e)}
         health_status["status"] = "unhealthy"
 
-    from datetime import datetime
-    health_status["timestamp"] = datetime.utcnow().isoformat()
+    health_status["timestamp"] = datetime.datetime.utcnow().isoformat() + "Z"
 
     return health_status

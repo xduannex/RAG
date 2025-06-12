@@ -5,6 +5,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from app.core.database import engine
+from app.models.database_models import Base
 import uvicorn
 import os
 
@@ -23,6 +25,30 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+app = FastAPI(title="RAG PDF Search API", version="1.0.0")
+
+
+@app.on_event("startup")
+def startup_event():
+    """Initialize database on startup"""
+    try:
+        from app.core.database import init_db, check_database_health
+
+        # Initialize database (add missing columns)
+        logger.info("Initializing database...")
+        init_success = init_db()
+
+        if init_success:
+            # Check health
+            health = check_database_health()
+            logger.info(f"Database health: {health}")
+        else:
+            logger.error("Database initialization failed")
+
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+
+
 logger = logging.getLogger(__name__)
 
 # Global services
@@ -32,70 +58,24 @@ vector_store = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    global ollama_service, vector_store
-
+    """Handle application startup and shutdown"""
+    # Startup
     try:
-        logger.info("Starting RAG PDF Search API...")
-
-        # Initialize database
-        await init_db()
+        from app.core.database import init_db
+        init_db()  # This is a synchronous function, don't await it
         logger.info("Database initialized successfully")
-
-        # Initialize Ollama service
-        ollama_service = OllamaService()
-
-        # Try to verify Ollama connection (but don't fail if it's not available)
-        try:
-            is_healthy = await ollama_service.health_check()
-            if is_healthy:
-                logger.info("Ollama service is healthy and ready")
-            else:
-                logger.warning("Ollama service is not fully ready - some features may be limited")
-        except Exception as e:
-            logger.warning(f"Could not verify Ollama service: {str(e)}")
-
-        # Initialize vector store
-        vector_store = VectorStore()
-        await vector_store.initialize()
-
-        # Get initial chunk count
-        chunk_count = await vector_store.get_chunk_count()
-        logger.info(f"Vector store initialized with {chunk_count} chunks")
-
-        logger.info("Application startup completed successfully")
-
-        yield
-
     except Exception as e:
-        logger.error(f"Failed to start application: {str(e)}")
+        logger.error(f"Database initialization failed: {e}")
         raise
-    finally:
-        # Cleanup
-        logger.info("Shutting down application...")
 
-        # Close services safely
-        try:
-            if ollama_service:
-                await ollama_service.close()
-                logger.info("Ollama service closed")
-        except Exception as e:
-            logger.error(f"Error closing Ollama service: {e}")
+    yield
 
-        try:
-            if vector_store:
-                await vector_store.close()
-                logger.info("Vector store closed")
-        except Exception as e:
-            logger.error(f"Error closing vector store: {e}")
-
-        logger.info("Application shutdown completed")
+    # Shutdown
+    logger.info("Application shutdown completed")
 
 
-# Create FastAPI app
 app = FastAPI(
     title="RAG PDF Search API",
-    description="A RAG-based PDF search and question-answering system",
     version="1.0.0",
     lifespan=lifespan
 )

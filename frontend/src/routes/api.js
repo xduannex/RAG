@@ -1,10 +1,13 @@
 const express = require('express');
 const multer = require('multer');
 const FormData = require('form-data');
-const ragClient = require('../utils/ragClient');
+const axios = require('axios'); // Make sure axios is imported
 const config = require('../config/config');
 
 const router = express.Router();
+
+// FastAPI backend URL - adjust port if needed
+const FASTAPI_BASE_URL = 'http://localhost:8000';
 
 // Configure multer for file uploads
 const upload = multer({
@@ -22,53 +25,88 @@ const upload = multer({
     }
 });
 
-// Health check - Updated endpoint
+// Health check - Fixed to properly proxy to FastAPI
 router.get('/health', async (req, res) => {
     try {
-        const backendHealth = await ragClient.healthCheck();
-        res.json({
-            frontend: 'OK',
-            backend: backendHealth.success ? 'OK' : 'ERROR',
-            backendError: backendHealth.error || null,
-            timestamp: new Date().toISOString()
+        console.log('Health check: Proxying to FastAPI backend...');
+
+        const response = await axios.get(`${FASTAPI_BASE_URL}/health`, {
+            timeout: 10000,
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
         });
+
+        console.log('FastAPI health response:', response.data);
+
+        // Return the FastAPI response directly
+        res.json(response.data);
+
     } catch (error) {
+        console.error('Health check proxy error:', error.message);
+
+        // Return error in expected format
         res.status(500).json({
-            frontend: 'OK',
-            backend: 'ERROR',
-            backendError: error.message,
+            status: 'unhealthy',
+            database: 'unknown',
+            database_error: error.message,
             timestamp: new Date().toISOString()
         });
     }
 });
 
-// Stats - Updated endpoint
+// Detailed health check
+router.get('/health/detailed', async (req, res) => {
+    try {
+        console.log('Detailed health check: Proxying to FastAPI backend...');
+
+        const response = await axios.get(`${FASTAPI_BASE_URL}/health/detailed`, {
+            timeout: 15000,
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        res.json(response.data);
+
+    } catch (error) {
+        console.error('Detailed health check proxy error:', error.message);
+
+        res.status(500).json({
+            status: 'unhealthy',
+            services: {},
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Stats - Fixed to proxy to FastAPI
 router.get('/stats', async (req, res) => {
     try {
-        const result = await ragClient.getSearchStats();
-        if (result.success) {
-            res.json(result.data);
-        } else {
-            res.status(500).json({
-                total_pdfs: 0,
-                searchable_pdfs: 0,
-                total_searches: 0
-            });
-        }
+        const response = await axios.get(`${FASTAPI_BASE_URL}/api/stats`, {
+            timeout: 10000
+        });
+        res.json(response.data);
     } catch (error) {
+        console.error('Error fetching stats:', error.message);
         res.status(500).json({
             total_pdfs: 0,
             searchable_pdfs: 0,
-            total_searches: 0
+            total_searches: 0,
+            processing_pdfs: 0
         });
     }
 });
 
-// Get PDFs - Updated endpoint
+// Get PDFs - Fixed to proxy to FastAPI
 router.get('/pdfs', async (req, res) => {
     try {
-        const axios = require('axios');
-        const response = await axios.get(`${config.ragApi.baseUrl}/api/pdf/`);
+        const response = await axios.get(`${FASTAPI_BASE_URL}/api/pdf/`, {
+            timeout: 10000
+        });
         res.json(response.data);
     } catch (error) {
         console.error('Error fetching PDFs:', error.message);
@@ -76,7 +114,7 @@ router.get('/pdfs', async (req, res) => {
     }
 });
 
-// Upload PDF - Updated endpoint
+// Upload PDF - Fixed to proxy to FastAPI
 router.post('/upload', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -95,22 +133,27 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         if (req.body.category) formData.append('category', req.body.category);
         if (req.body.description) formData.append('description', req.body.description);
 
-        const result = await ragClient.uploadPDF(formData);
+        const response = await axios.post(`${FASTAPI_BASE_URL}/api/pdf/upload`, formData, {
+            headers: {
+                ...formData.getHeaders(),
+            },
+            timeout: 60000, // 60 seconds for file upload
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+        });
 
-        if (result.success) {
-            console.log('Upload successful:', result.data.id);
-            res.json(result.data);
-        } else {
-            console.error('Upload failed:', result.error);
-            res.status(500).json({ error: result.error });
-        }
+        console.log('Upload successful:', response.data);
+        res.json(response.data);
+
     } catch (error) {
-        console.error('Upload error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Upload error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message
+        });
     }
 });
 
-// Search documents - Updated endpoint
+// Search documents - Fixed to proxy to FastAPI
 router.post('/search', async (req, res) => {
     try {
         const { query, ...options } = req.body;
@@ -121,20 +164,27 @@ router.post('/search', async (req, res) => {
 
         console.log('Search query:', query, 'Options:', options);
 
-        const result = await ragClient.searchDocuments(query, options);
+        const response = await axios.post(`${FASTAPI_BASE_URL}/api/search`, {
+            query,
+            ...options
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            timeout: 30000
+        });
 
-        if (result.success) {
-            res.json(result.data);
-        } else {
-            res.status(500).json({ error: result.error });
-        }
+        res.json(response.data);
+
     } catch (error) {
-        console.error('Search error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Search error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message
+        });
     }
 });
 
-// RAG Query - Updated endpoint
+// RAG Query - Fixed to proxy to FastAPI
 router.post('/rag', async (req, res) => {
     try {
         const { question, ...options } = req.body;
@@ -145,62 +195,122 @@ router.post('/rag', async (req, res) => {
 
         console.log('RAG query:', question, 'Options:', options);
 
-        const result = await ragClient.ragQuery(question, options);
+        const response = await axios.post(`${FASTAPI_BASE_URL}/api/rag`, {
+            question,
+            ...options
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            timeout: 60000 // RAG queries can take longer
+        });
 
-        if (result.success) {
-            res.json(result.data);
-        } else {
-            res.status(500).json({ error: result.error });
-        }
+        res.json(response.data);
+
     } catch (error) {
-        console.error('RAG query error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('RAG query error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message
+        });
     }
 });
 
-// Delete PDF - New endpoint
+// Delete PDF - Fixed to proxy to FastAPI
 router.delete('/pdf/:id', async (req, res) => {
     try {
         const pdfId = req.params.id;
-        const axios = require('axios');
-
-        const response = await axios.delete(`${config.ragApi.baseUrl}/api/pdf/${pdfId}`);
+        const response = await axios.delete(`${FASTAPI_BASE_URL}/api/pdf/${pdfId}`, {
+            timeout: 30000
+        });
         res.json(response.data);
     } catch (error) {
-        console.error('Delete PDF error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Delete PDF error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message
+        });
     }
 });
 
-// Reprocess PDF - New endpoint
+// Reprocess PDF - Fixed to proxy to FastAPI
 router.post('/pdf/:id/reprocess', async (req, res) => {
     try {
         const pdfId = req.params.id;
-        const axios = require('axios');
-
-        const response = await axios.post(`${config.ragApi.baseUrl}/api/pdf/${pdfId}/reprocess`);
+        const response = await axios.post(`${FASTAPI_BASE_URL}/api/pdf/${pdfId}/reprocess`, {}, {
+            timeout: 60000
+        });
         res.json(response.data);
     } catch (error) {
-        console.error('Reprocess PDF error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Reprocess PDF error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message
+        });
     }
 });
 
-// View PDF - New endpoint
+// View PDF - Fixed to proxy to FastAPI
 router.get('/pdf/:id/view', async (req, res) => {
     try {
         const pdfId = req.params.id;
-        const axios = require('axios');
-
-        const response = await axios.get(`${config.ragApi.baseUrl}/api/pdf/${pdfId}/view`, {
-            responseType: 'stream'
+        const response = await axios.get(`${FASTAPI_BASE_URL}/api/pdf/${pdfId}/view`, {
+            responseType: 'stream',
+            timeout: 30000
         });
 
         res.setHeader('Content-Type', 'application/pdf');
         response.data.pipe(res);
     } catch (error) {
-        console.error('View PDF error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('View PDF error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message
+        });
+    }
+});
+
+// Download PDF - New endpoint
+router.get('/pdf/:id/download', async (req, res) => {
+    try {
+        const pdfId = req.params.id;
+        const response = await axios.get(`${FASTAPI_BASE_URL}/api/pdf/${pdfId}/download`, {
+            responseType: 'stream',
+            timeout: 30000
+        });
+
+        // Set appropriate headers for download
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="document-${pdfId}.pdf"`);
+        response.data.pipe(res);
+    } catch (error) {
+        console.error('Download PDF error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message
+        });
+    }
+});
+
+// Generic proxy for any other API calls
+router.all('*', async (req, res) => {
+    try {
+        console.log(`Proxying ${req.method} ${req.originalUrl} to FastAPI`);
+
+        const fastApiPath = req.originalUrl.replace('/api', '/api');
+        const response = await axios({
+            method: req.method,
+            url: `${FASTAPI_BASE_URL}${fastApiPath}`,
+            data: req.body,
+            headers: {
+                'Content-Type': req.headers['content-type'] || 'application/json',
+                'Accept': 'application/json'
+            },
+            timeout: 30000
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error('Generic proxy error:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.detail || error.message,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 

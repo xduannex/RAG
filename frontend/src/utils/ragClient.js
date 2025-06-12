@@ -15,7 +15,7 @@ class RAGClient {
 
     async healthCheck() {
         try {
-            const response = await this.client.get('/api/health');
+            const response = await this.client.get('/health');
             return {
                 success: true,
                 data: response.data
@@ -30,7 +30,7 @@ class RAGClient {
 
     async getSearchStats() {
         try {
-            const response = await this.client.get('/api/stats');
+            const response = await this.client.get('/stats');
             return {
                 success: true,
                 data: response.data
@@ -45,7 +45,7 @@ class RAGClient {
 
     async uploadPDF(formData) {
         try {
-            const response = await this.client.post('/api/pdf/upload', formData, {
+            const response = await this.client.post('/pdf/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 }
@@ -68,7 +68,7 @@ class RAGClient {
                 query,
                 ...options
             };
-            const response = await this.client.post('/api/search/', payload);
+            const response = await this.client.post('/search/', payload);
             return {
                 success: true,
                 data: response.data
@@ -87,7 +87,7 @@ class RAGClient {
                 question,
                 ...options
             };
-            const response = await this.client.post('/api/search/rag', payload);
+            const response = await this.client.post('/search/rag', payload);
             return {
                 success: true,
                 data: response.data

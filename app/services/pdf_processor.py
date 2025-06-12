@@ -5,6 +5,8 @@ from typing import Dict, List, Any, Tuple, Optional
 import PyPDF2
 from datetime import datetime
 import re
+import json
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,226 @@ class PDFProcessor:
     def __init__(self):
         self.chunk_size = 1000
         self.chunk_overlap = 200
+        # Use your existing storage paths
+        self.upload_dir = os.getenv("UPLOAD_DIR", "./storage/pdfs")
+        os.makedirs(self.upload_dir, exist_ok=True)
+        self.chroma_service = None
+
+    async def initialize_chroma(self):
+        """Initialize ChromaDB service if needed"""
+        try:
+            if not self.chroma_service:
+                from app.services.chroma_service import ChromaService
+                self.chroma_service = ChromaService()
+                await self.chroma_service.initialize()
+                logger.info("ChromaDB service initialized in PDF processor")
+        except Exception as e:
+            logger.error(f"Failed to initialize ChromaDB: {e}")
+
+    async def upload_and_process_pdf(
+            self,
+            file_content: bytes,
+            filename: str,
+            title: Optional[str] = None,
+            category: Optional[str] = None,
+            description: Optional[str] = None,
+            db: Session = None
+    ) -> Dict[str, Any]:
+        """Main method to upload and process a PDF file"""
+        try:
+            # Import here to avoid circular imports
+            from app.models.database_models import PDFDocument
+
+            logger.info(f"Starting upload and processing for: {filename}")
+
+            # Save the file
+            file_path = self.save_file(file_content, filename)
+
+            # Calculate file hash
+            file_hash = self.calculate_file_hash(file_path)
+
+            # Check if file already exists
+            if db and file_hash:
+                existing_pdf = db.query(PDFDocument).filter(
+                    PDFDocument.file_hash == file_hash
+                ).first()
+
+                if existing_pdf:
+                    logger.info(f"File already exists with ID: {existing_pdf.id}")
+                    return {
+                        "success": False,
+                        "error": "File already exists",
+                        "existing_id": existing_pdf.id,
+                        "filename": filename
+                    }
+
+            # Get PDF metadata
+            pdf_metadata = self.get_pdf_metadata(file_path)
+
+            # Create database record with proper datetime
+            current_time = datetime.utcnow()
+
+            pdf_doc = PDFDocument(
+                filename=filename,
+                file_path=file_path,
+                file_size=os.path.getsize(file_path),
+                file_hash=file_hash,
+                title=title or pdf_metadata.get("title"),
+                category=category,
+                description=description,
+                status="uploaded",
+                upload_date=current_time,  # Ensure this is set
+                created_at=current_time,  # Ensure this is set
+                updated_at=current_time,  # Ensure this is set
+                processed=False,
+                chunk_count=0
+            )
+
+            # Set metadata using our method
+            pdf_doc.set_metadata(pdf_metadata)
+
+            if db:
+                db.add(pdf_doc)
+                db.commit()
+                db.refresh(pdf_doc)
+                logger.info(f"Created database record with ID: {pdf_doc.id}")
+
+            # Process the PDF
+            chunks = await self.process_pdf(file_path)
+
+            if chunks:
+                # Update database with processing results
+                pdf_doc.chunk_count = len(chunks)
+                pdf_doc.processed = True
+                pdf_doc.status = "processed"
+                pdf_doc.updated_at = datetime.utcnow()
+
+                if db:
+                    db.commit()
+
+                # Index in ChromaDB
+                await self.initialize_chroma()
+                if self.chroma_service:
+                    await self.index_pdf_chunks(pdf_doc.id, chunks, pdf_doc)
+
+                logger.info(f"Successfully processed PDF: {filename} ({len(chunks)} chunks)")
+
+                return {
+                    "success": True,
+                    "id": pdf_doc.id,
+                    "filename": filename,
+                    "title": pdf_doc.title,
+                    "category": pdf_doc.category,
+                    "chunks": len(chunks),
+                    "file_hash": file_hash,
+                    "status": "processed",
+                    "file_size": pdf_doc.file_size,
+                    "upload_date": pdf_doc.upload_date  # This will now be a datetime object
+                }
+            else:
+                # Processing failed
+                pdf_doc.status = "failed"
+                pdf_doc.processing_error = "No chunks could be extracted"
+                pdf_doc.updated_at = datetime.utcnow()
+
+                if db:
+                    db.commit()
+
+                logger.error(f"Failed to extract chunks from: {filename}")
+                return {
+                    "success": False,
+                    "error": "Could not extract text from PDF",
+                    "id": pdf_doc.id,
+                    "filename": filename,
+                    "upload_date": pdf_doc.upload_date
+                }
+
+        except Exception as e:
+            logger.error(f"Error uploading and processing PDF: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "filename": filename
+            }
+
+    async def index_pdf_chunks(self, pdf_id: int, chunks: List[Dict[str, Any]], pdf_doc) -> bool:
+        """Index PDF chunks in ChromaDB"""
+        try:
+            if not self.chroma_service:
+                logger.warning("ChromaDB service not initialized")
+                return False
+
+            # Prepare documents for ChromaDB
+            documents = []
+            metadatas = []
+            ids = []
+
+            for i, chunk in enumerate(chunks):
+                doc_id = f"pdf_{pdf_id}_chunk_{i}"
+
+                documents.append(chunk['content'])
+                metadatas.append({
+                    'pdf_id': pdf_id,
+                    'filename': pdf_doc.filename,
+                    'title': pdf_doc.title or pdf_doc.filename,
+                    'category': pdf_doc.category or 'uncategorized',
+                    'page_number': chunk.get('page_number', 1),
+                    'chunk_index': i,
+                    'word_count': chunk.get('word_count', 0),
+                    'char_count': chunk.get('char_count', 0)
+                })
+                ids.append(doc_id)
+
+            # Add to ChromaDB
+            success = await self.chroma_service.add_documents(documents, metadatas, ids)
+
+            if success:
+                logger.info(f"Successfully indexed {len(chunks)} chunks for PDF {pdf_id}")
+            else:
+                logger.error(f"Failed to index chunks for PDF {pdf_id}")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Error indexing PDF chunks: {e}")
+            return False
+
+    async def process_pdf(self, file_path: str) -> List[Dict[str, Any]]:
+        """Async wrapper for processing PDF - returns chunks ready for ChromaDB"""
+        try:
+            logger.info(f"Processing PDF: {file_path}")
+
+            # Validate the PDF first
+            is_valid, validation_message = self.validate_pdf(file_path)
+            if not is_valid:
+                logger.error(f"PDF validation failed: {validation_message}")
+                return []
+
+            # Use your existing method
+            chunks = self.process_pdf_to_chunks(file_path)
+
+            if not chunks:
+                logger.warning(f"No chunks extracted from {file_path}")
+                return []
+
+            # Format chunks for ChromaDB
+            formatted_chunks = []
+            for chunk in chunks:
+                formatted_chunks.append({
+                    'content': chunk.get('text', ''),
+                    'page_number': chunk.get('page_number', 1),
+                    'chunk_index': chunk.get('chunk_index', 0),
+                    'char_count': chunk.get('char_count', 0),
+                    'word_count': chunk.get('word_count', 0),
+                    'keywords': chunk.get('keywords', [])
+                })
+
+            logger.info(f"Formatted {len(formatted_chunks)} chunks for indexing")
+            return formatted_chunks
+
+        except Exception as e:
+            logger.error(f"Error in async PDF processing: {e}")
+            return []
 
     def validate_pdf(self, file_path: str) -> Tuple[bool, str]:
         """Validate if the file is a proper PDF"""
@@ -39,7 +261,7 @@ class PDFProcessor:
             return False, f"PDF validation error: {str(e)}"
 
     def get_pdf_metadata(self, file_path: str) -> Dict[str, Any]:
-        """Extract metadata from PDF"""
+        """Extract metadata from PDF - compatible with your existing schema"""
         try:
             metadata = {
                 "file_size": os.path.getsize(file_path),
@@ -51,13 +273,15 @@ class PDFProcessor:
                 "producer": None,
                 "creation_date": None,
                 "modification_date": None,
-                "file_hash": None
+                "file_hash": None,
+                "processing_date": datetime.utcnow().isoformat(),
+                "processor_version": "1.0"
             }
 
             # Calculate file hash
             with open(file_path, 'rb') as file:
                 file_content = file.read()
-                metadata["file_hash"] = hashlib.md5(file_content).hexdigest()
+                metadata["file_hash"] = hashlib.sha256(file_content).hexdigest()
 
             # Extract PDF metadata
             with open(file_path, 'rb') as file:
@@ -66,13 +290,13 @@ class PDFProcessor:
 
                 if pdf_reader.metadata:
                     metadata.update({
-                        "title": pdf_reader.metadata.get('/Title'),
-                        "author": pdf_reader.metadata.get('/Author'),
-                        "subject": pdf_reader.metadata.get('/Subject'),
-                        "creator": pdf_reader.metadata.get('/Creator'),
-                        "producer": pdf_reader.metadata.get('/Producer'),
-                        "creation_date": pdf_reader.metadata.get('/CreationDate'),
-                        "modification_date": pdf_reader.metadata.get('/ModDate')
+                        "title": str(pdf_reader.metadata.get('/Title', '')).strip() or None,
+                        "author": str(pdf_reader.metadata.get('/Author', '')).strip() or None,
+                        "subject": str(pdf_reader.metadata.get('/Subject', '')).strip() or None,
+                        "creator": str(pdf_reader.metadata.get('/Creator', '')).strip() or None,
+                        "producer": str(pdf_reader.metadata.get('/Producer', '')).strip() or None,
+                        "creation_date": str(pdf_reader.metadata.get('/CreationDate', '')).strip() or None,
+                        "modification_date": str(pdf_reader.metadata.get('/ModDate', '')).strip() or None
                     })
 
             return metadata
@@ -85,7 +309,9 @@ class PDFProcessor:
                 "file_hash": None,
                 "title": None,
                 "author": None,
-                "subject": None
+                "subject": None,
+                "error": str(e),
+                "processing_date": datetime.utcnow().isoformat()
             }
 
     def extract_text_from_pdf(self, file_path: str) -> List[Dict[str, Any]]:
@@ -239,98 +465,346 @@ class PDFProcessor:
             logger.error(f"Error processing PDF to chunks: {e}")
             return []
 
+    def save_file(self, file_content: bytes, filename: str) -> str:
+        """Save uploaded file to your existing storage directory"""
+        try:
+            # Create a unique filename to avoid conflicts
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_filename = re.sub(r'[^\w\-_\.]', '_', filename)
+            unique_filename = f"{timestamp}_{safe_filename}"
 
-def process_word_document(self, file_path: str) -> Dict[str, Any]:
-    """Process Word document and extract text"""
-    try:
-        doc = Document(file_path)
+            file_path = os.path.join(self.upload_dir, unique_filename)
 
-        # Extract text from paragraphs
-        full_text = []
-        for paragraph in doc.paragraphs:
-            if paragraph.text.strip():
-                full_text.append(paragraph.text.strip())
+            # Save the file
+            with open(file_path, 'wb') as f:
+                f.write(file_content)
 
-        # Extract text from tables
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.text.strip():
-                        full_text.append(cell.text.strip())
+            logger.info(f"File saved to: {file_path}")
+            return file_path
 
-        combined_text = '\n'.join(full_text)
+        except Exception as e:
+            logger.error(f"Error saving file: {e}")
+            raise
 
-        # Get document properties
-        props = doc.core_properties
+    def calculate_file_hash(self, file_path: str) -> str:
+        """Calculate SHA256 hash of file"""
+        try:
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+                return hashlib.sha256(file_content).hexdigest()
+        except Exception as e:
+            logger.error(f"Error calculating file hash: {e}")
+            return None
 
-        # Get file stats
-        file_stats = os.stat(file_path)
+    def get_processing_summary(self, file_path: str, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Get a summary of the processing results"""
+        try:
+            metadata = self.get_pdf_metadata(file_path)
 
-        return {
-            "text": combined_text,
-            "page_count": 1,  # Word docs don't have pages like PDFs
-            "word_count": len(combined_text.split()),
-            "char_count": len(combined_text),
-            "title": props.title or "",
-            "author": props.author or "",
-            "subject": props.subject or "",
-            "created": props.created,
-            "modified": props.modified,
-            "file_size": file_stats.st_size
-        }
-
-    except Exception as e:
-        logger.error(f"Error processing Word document {file_path}: {e}")
-        return None
-
-
-def validate_word_document(self, file_path: str) -> tuple[bool, str]:
-    """Validate Word document"""
-    try:
-        doc = Document(file_path)
-        # Try to access basic properties
-        _ = doc.paragraphs
-        return True, "Valid Word document"
-    except Exception as e:
-        return False, f"Invalid Word document: {str(e)}"
-
-
-def process_word_to_chunks(self, file_path: str, chunk_size: int = 1000) -> List[Dict[str, Any]]:
-    """Process Word document into chunks"""
-    try:
-        doc_data = self.process_word_document(file_path)
-        if not doc_data:
-            return []
-
-        text = doc_data["text"]
-        if not text.strip():
-            return []
-
-        # Split into chunks
-        chunks = []
-        words = text.split()
-
-        for i in range(0, len(words), chunk_size):
-            chunk_words = words[i:i + chunk_size]
-            chunk_text = ' '.join(chunk_words)
-
-            if chunk_text.strip():
-                # Extract keywords (simple approach)
-                keywords = self._extract_keywords(chunk_text)
-
-                chunk = {
-                    "text": chunk_text,
-                    "page_number": 1,  # Word docs treated as single page
-                    "chunk_index": len(chunks),
-                    "position": i,
-                    "char_count": len(chunk_text),
-                    "word_count": len(chunk_words),
-                    "keywords": keywords
+            return {
+                "file_path": file_path,
+                "file_size": metadata.get("file_size", 0),
+                "total_pages": metadata.get("total_pages", 0),
+                "total_chunks": len(chunks),
+                "total_words": sum(chunk.get("word_count", 0) for chunk in chunks),
+                "total_chars": sum(chunk.get("char_count", 0) for chunk in chunks),
+                "file_hash": metadata.get("file_hash"),
+                "processing_date": datetime.utcnow().isoformat(),
+                "pdf_metadata": {
+                    "title": metadata.get("title"),
+                    "author": metadata.get("author"),
+                    "subject": metadata.get("subject"),
+                    "creator": metadata.get("creator")
                 }
-                chunks.append(chunk)
+            }
+        except Exception as e:
+            logger.error(f"Error creating processing summary: {e}")
+            return {
+                "file_path": file_path,
+                "error": str(e),
+                "processing_date": datetime.utcnow().isoformat()
+            }
 
-        return chunks
+    def cleanup_temp_files(self, file_path: str):
+        """Clean up temporary files if needed"""
+        try:
+            # Only remove if it's in a temp directory, not your main storage
+            if "/tmp/" in file_path or "\\temp\\" in file_path:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Cleaned up temp file: {file_path}")
+        except Exception as e:
+            logger.warning(f"Could not clean up temp file {file_path}: {e}")
 
-    except Exception as e:
-        logger.error(f"Error processing Word document to chunks: {e}")
-        return []
+    # Database helper methods
+    def get_pdf_by_id(self, pdf_id: int, db: Session):
+        """Get PDF document by ID"""
+        try:
+            from app.models.database_models import PDFDocument
+            return db.query(PDFDocument).filter(PDFDocument.id == pdf_id).first()
+        except Exception as e:
+            logger.error(f"Error getting PDF by ID: {e}")
+            return None
+
+    def list_pdfs(self, db: Session, skip: int = 0, limit: int = 100):
+        """List all PDF documents"""
+        try:
+            from app.models.database_models import PDFDocument
+            return db.query(PDFDocument).offset(skip).limit(limit).all()
+        except Exception as e:
+            logger.error(f"Error listing PDFs: {e}")
+            return []
+
+    def get_pdf_stats(self, db: Session) -> Dict[str, Any]:
+        """Get PDF statistics"""
+        try:
+            from app.models.database_models import PDFDocument
+
+            total_pdfs = db.query(PDFDocument).count()
+            processed_pdfs = db.query(PDFDocument).filter(PDFDocument.processed == True).count()
+            failed_pdfs = db.query(PDFDocument).filter(PDFDocument.status == 'failed').count()
+            processing_pdfs = db.query(PDFDocument).filter(PDFDocument.status == 'processing').count()
+
+            return {
+                "total_pdfs": total_pdfs,
+                "searchable_pdfs": processed_pdfs,  # For compatibility with frontend
+                "processed_pdfs": processed_pdfs,
+                "failed_pdfs": failed_pdfs,
+                "processing_pdfs": processing_pdfs,
+                "total_searches": 0  # Will be updated when we implement search logging
+            }
+        except Exception as e:
+            logger.error(f"Error getting PDF stats: {e}")
+            return {
+                "total_pdfs": 0,
+                "searchable_pdfs": 0,
+                "processed_pdfs": 0,
+                "failed_pdfs": 0,
+                "processing_pdfs": 0,
+                "total_searches": 0
+            }
+
+    async def reprocess_pdf(self, pdf_id: int, db: Session) -> Dict[str, Any]:
+        """Reprocess an existing PDF"""
+        try:
+            from app.models.database_models import PDFDocument
+
+            # Get the PDF record
+            pdf_doc = db.query(PDFDocument).filter(PDFDocument.id == pdf_id).first()
+            if not pdf_doc:
+                return {"success": False, "error": "PDF not found"}
+
+            # Check if file still exists
+            if not os.path.exists(pdf_doc.file_path):
+                return {"success": False, "error": "PDF file not found on disk"}
+
+            # Update status to processing
+            pdf_doc.status = "processing"
+            pdf_doc.processing_error = None
+            db.commit()
+
+            # Process the PDF
+            chunks = await self.process_pdf(pdf_doc.file_path)
+
+            if chunks:
+                # Update database with processing results
+                pdf_doc.chunk_count = len(chunks)
+                pdf_doc.processed = True
+                pdf_doc.status = "processed"
+                pdf_doc.updated_at = datetime.utcnow()
+                db.commit()
+
+                # Re-index in ChromaDB
+                await self.initialize_chroma()
+                if self.chroma_service:
+                    # Remove old chunks first
+                    await self.chroma_service.delete_documents_by_pdf_id(pdf_id)
+                    # Add new chunks
+                    await self.index_pdf_chunks(pdf_id, chunks, pdf_doc)
+
+                logger.info(f"Successfully reprocessed PDF {pdf_id}: {pdf_doc.filename}")
+
+                return {
+                    "success": True,
+                    "id": pdf_id,
+                    "filename": pdf_doc.filename,
+                    "chunks": len(chunks),
+                    "status": "processed"
+                }
+            else:
+                # Processing failed
+                pdf_doc.status = "failed"
+                pdf_doc.processing_error = "No chunks could be extracted during reprocessing"
+                db.commit()
+
+                return {
+                    "success": False,
+                    "error": "Could not extract text from PDF during reprocessing",
+                    "id": pdf_id
+                }
+
+        except Exception as e:
+            logger.error(f"Error reprocessing PDF {pdf_id}: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    async def delete_pdf(self, pdf_id: int, db: Session) -> Dict[str, Any]:
+        """Delete a PDF and its associated data"""
+        try:
+            from app.models.database_models import PDFDocument
+
+            # Get the PDF record
+            pdf_doc = db.query(PDFDocument).filter(PDFDocument.id == pdf_id).first()
+            if not pdf_doc:
+                return {"success": False, "error": "PDF not found"}
+
+            filename = pdf_doc.filename
+            file_path = pdf_doc.file_path
+
+            # Remove from ChromaDB
+            await self.initialize_chroma()
+            if self.chroma_service:
+                await self.chroma_service.delete_documents_by_pdf_id(pdf_id)
+
+            # Delete file from disk
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Deleted file: {file_path}")
+            except Exception as e:
+                logger.warning(f"Could not delete file {file_path}: {e}")
+
+            # Delete from database
+            db.delete(pdf_doc)
+            db.commit()
+
+            logger.info(f"Successfully deleted PDF {pdf_id}: {filename}")
+
+            return {
+                "success": True,
+                "id": pdf_id,
+                "filename": filename,
+                "message": "PDF deleted successfully"
+            }
+
+        except Exception as e:
+            logger.error(f"Error deleting PDF {pdf_id}: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    def get_pdf_content(self, pdf_id: int, db: Session) -> Optional[bytes]:
+        """Get PDF file content for viewing/downloading"""
+        try:
+            from app.models.database_models import PDFDocument
+
+            pdf_doc = db.query(PDFDocument).filter(PDFDocument.id == pdf_id).first()
+            if not pdf_doc:
+                return None
+
+            if not os.path.exists(pdf_doc.file_path):
+                logger.error(f"PDF file not found: {pdf_doc.file_path}")
+                return None
+
+            with open(pdf_doc.file_path, 'rb') as f:
+                return f.read()
+
+        except Exception as e:
+            logger.error(f"Error getting PDF content: {e}")
+            return None
+
+    async def search_pdfs(self, query: str, limit: int = 10) -> Dict[str, Any]:
+        """Search through indexed PDFs using ChromaDB"""
+        try:
+            await self.initialize_chroma()
+            if not self.chroma_service:
+                return {"success": False, "error": "Search service not available"}
+
+            # Search using ChromaDB
+            results = await self.chroma_service.search_documents(query, limit)
+
+            if results:
+                return {
+                    "success": True,
+                    "query": query,
+                    "results": results,
+                    "count": len(results)
+                }
+            else:
+                return {
+                    "success": True,
+                    "query": query,
+                    "results": [],
+                    "count": 0
+                }
+
+        except Exception as e:
+            logger.error(f"Error searching PDFs: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    async def rag_query(self, question: str, limit: int = 5) -> Dict[str, Any]:
+        """Perform RAG query using ChromaDB and Ollama"""
+        try:
+            await self.initialize_chroma()
+            if not self.chroma_service:
+                return {"success": False, "error": "Search service not available"}
+
+            # Search for relevant documents
+            search_results = await self.chroma_service.search_documents(question, limit)
+
+            if not search_results:
+                return {
+                    "success": True,
+                    "question": question,
+                    "answer": "I couldn't find any relevant information in the documents to answer your question.",
+                    "sources": []
+                }
+
+            # Try to use Ollama for generating answer
+            try:
+                from app.services.ollama_service import OllamaService
+                ollama_service = OllamaService()
+
+                # Prepare context from search results
+                context = "\n\n".join([
+                    f"From {result.get('filename', 'Unknown')}: {result.get('content', '')}"
+                    for result in search_results[:3]  # Use top 3 results
+                ])
+
+                # Generate answer
+                answer = await ollama_service.generate_answer(question, context)
+
+                return {
+                    "success": True,
+                    "question": question,
+                    "answer": answer,
+                    "sources": search_results,
+                    "context_used": len(search_results)
+                }
+
+            except Exception as ollama_error:
+                logger.warning(f"Ollama not available, returning search results: {ollama_error}")
+
+                # Fallback: return search results without generated answer
+                return {
+                    "success": True,
+                    "question": question,
+                    "answer": f"Based on the documents, here are the most relevant excerpts:\n\n" +
+                              "\n\n".join([f"• {result.get('content', '')[:200]}..."
+                                           for result in search_results[:3]]),
+                    "sources": search_results,
+                    "note": "Generated using search results (Ollama not available)"
+                }
+
+        except Exception as e:
+            logger.error(f"Error in RAG query: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
