@@ -1,4 +1,4 @@
-// API configuration - Direct endpoints without /api prefix
+// API configuration - Use relative URLs for network compatibility
 const API_BASE_URL = '/api';
 
 class RAGChatApp {
@@ -11,7 +11,7 @@ class RAGChatApp {
         this.currentFileId = null;
         this.bulkUploadData = null;
         this.CONFIG = {
-            API_BASE_URL: '',
+            API_BASE_URL: '/api',
             HEALTH_CHECK_INTERVAL: 30000,
             MAX_FILE_SIZE: 50 * 1024 * 1024,
             ALLOWED_TYPES: ['pdf', 'doc', 'docx'],
@@ -174,277 +174,276 @@ class RAGChatApp {
     }
 
     async checkConnection() {
-    try {
-        console.log('Checking connection to:', `${API_BASE_URL}/health`);
-        const response = await fetch(`${API_BASE_URL}/health`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            // Add timeout to prevent hanging requests
-            signal: AbortSignal.timeout(10000) // 10 second timeout
-        });
+        try {
+            console.log('Checking connection to:', `${API_BASE_URL}/health`);
+            const response = await fetch(`${API_BASE_URL}/health`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                // Add timeout to prevent hanging requests
+                signal: AbortSignal.timeout(10000) // 10 second timeout
+            });
 
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers.get('content-type'));
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers.get('content-type'));
 
-        // Handle different response scenarios
-        if (response.ok) {
-            // Check if response is JSON
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                const data = await response.json();
-                console.log('Health check response:', data);
+            // Handle different response scenarios
+            if (response.ok) {
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    console.log('Health check response:', data);
 
-                // Match the backend response format from health.py
-                const isHealthy = data.status === 'healthy';
-                this.isConnected = isHealthy;
+                    // Match the backend response format from health.py
+                    const isHealthy = data.status === 'healthy';
+                    this.isConnected = isHealthy;
 
-                // Update UI with detailed health info
-                this.updateConnectionStatus(isHealthy, data);
+                    // Update UI with detailed health info
+                    this.updateConnectionStatus(isHealthy, data);
 
-                // Reset reconnection attempts on successful connection
-                this.reconnectAttempts = 0;
+                    // Reset reconnection attempts on successful connection
+                    this.reconnectAttempts = 0;
 
-                return data;
-            } else {
-                // Response is not JSON (likely HTML error page)
-                const text = await response.text();
-                console.error('Health check returned non-JSON response:', text.substring(0, 200));
-                this.isConnected = false;
-                this.updateConnectionStatus(false, null, 'Invalid response format');
-                throw new Error('Invalid response format - expected JSON');
-            }
-        } else {
-            // Handle HTTP error responses
-            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-
-            try {
-                // Try to get error details from JSON response
-                const errorData = await response.json();
-                if (errorData.database_error) {
-                    errorMessage += ` - Database: ${errorData.database_error}`;
+                    return data;
+                } else {
+                    // Response is not JSON (likely HTML error page)
+                    const text = await response.text();
+                    console.error('Health check returned non-JSON response:', text.substring(0, 200));
+                    this.isConnected = false;
+                    this.updateConnectionStatus(false, null, 'Invalid response format');
+                    throw new Error('Invalid response format - expected JSON');
                 }
-            } catch (e) {
-                // If response is not JSON, use status text
-                console.warn('Could not parse error response as JSON');
+            } else {
+                // Handle HTTP error responses
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+                try {
+                    // Try to get error details from JSON response
+                    const errorData = await response.json();
+                    if (errorData.database_error) {
+                        errorMessage += ` - Database: ${errorData.database_error}`;
+                    }
+                } catch (e) {
+                    // If response is not JSON, use status text
+                    console.warn('Could not parse error response as JSON');
+                }
+
+                console.error('Health check failed:', errorMessage);
+                this.isConnected = false;
+                this.updateConnectionStatus(false, null, errorMessage);
+                throw new Error(errorMessage);
+            }
+        } catch (error) {
+            console.error('Connection check failed:', error);
+            this.isConnected = false;
+
+            // Handle different types of errors
+            let errorMessage = 'Connection failed';
+            if (error.name === 'AbortError') {
+                errorMessage = 'Request timeout';
+            } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                errorMessage = 'Network error - server may be offline';
+            } else {
+                errorMessage = error.message;
             }
 
-            console.error('Health check failed:', errorMessage);
-            this.isConnected = false;
             this.updateConnectionStatus(false, null, errorMessage);
-            throw new Error(errorMessage);
+            this.handleConnectionError();
+            throw error;
         }
-    } catch (error) {
-        console.error('Connection check failed:', error);
-        this.isConnected = false;
-
-        // Handle different types of errors
-        let errorMessage = 'Connection failed';
-        if (error.name === 'AbortError') {
-            errorMessage = 'Request timeout';
-        } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            errorMessage = 'Network error - server may be offline';
-        } else {
-            errorMessage = error.message;
-        }
-
-        this.updateConnectionStatus(false, null, errorMessage);
-        this.handleConnectionError();
-        throw error;
     }
-}
 
     updateConnectionStatus(isConnected, healthData = null, errorMessage = null) {
-    // Update the main connection status
-    this.isConnected = isConnected;
+        // Update the main connection status
+        this.isConnected = isConnected;
 
-    // Update status indicator in sidebar
-    const statusElement = document.getElementById('statusIndicator');
-    const statusText = statusElement?.querySelector('.status-text');
+        // Update status indicator in sidebar
+        const statusElement = document.getElementById('statusIndicator');
+        const statusText = statusElement?.querySelector('.status-text');
 
-    if (statusElement && statusText) {
-        statusElement.className = 'status-indicator';
+        if (statusElement && statusText) {
+            statusElement.className = 'status-indicator';
 
-        if (isConnected) {
-            statusElement.classList.add('connected');
-            statusText.textContent = 'Connected';
+            if (isConnected) {
+                statusElement.classList.add('connected');
+                statusText.textContent = 'Connected';
 
-            // Show additional health info if available
-            if (healthData && healthData.database) {
-                const dbStatus = healthData.database === 'healthy' ? '✓' : '✗';
-                statusText.textContent = `Connected ${dbStatus}`;
+                // Show additional health info if available
+                if (healthData && healthData.database) {
+                    const dbStatus = healthData.database === 'healthy' ? '✓' : '✗';
+                    statusText.textContent = `Connected ${dbStatus}`;
+                }
+            } else {
+                statusElement.classList.add('disconnected');
+                statusText.textContent = 'Disconnected';
             }
-        } else {
-            statusElement.classList.add('disconnected');
-            statusText.textContent = 'Disconnected';
+        }
+
+        // Update connection banner
+        this.updateConnectionBanner(isConnected, errorMessage);
+
+        // Log health status for debugging
+        if (healthData) {
+            console.log('Health Status:', {
+                overall: healthData.status,
+                database: healthData.database,
+                timestamp: healthData.timestamp,
+                error: healthData.database_error
+            });
         }
     }
 
-    // Update connection banner
-    this.updateConnectionBanner(isConnected, errorMessage);
+    updateConnectionBanner(isConnected, errorMessage = null) {
+        const banner = document.getElementById('connectionBanner');
+        const messageElement = document.getElementById('connectionMessage');
 
-    // Log health status for debugging
-    if (healthData) {
-        console.log('Health Status:', {
-            overall: healthData.status,
-            database: healthData.database,
-            timestamp: healthData.timestamp,
-            error: healthData.database_error
-        });
+        if (!banner || !messageElement) return;
+
+        if (!isConnected && errorMessage) {
+            messageElement.textContent = errorMessage;
+            banner.style.display = 'block';
+
+            // Auto-hide banner after 10 seconds
+            setTimeout(() => {
+                if (banner.style.display === 'block') {
+                    banner.style.display = 'none';
+                }
+            }, 10000);
+        } else if (isConnected) {
+            banner.style.display = 'none';
+        }
     }
-}
-updateConnectionBanner(isConnected, errorMessage = null) {
-    const banner = document.getElementById('connectionBanner');
-    const messageElement = document.getElementById('connectionMessage');
 
-    if (!banner || !messageElement) return;
+    handleConnectionError() {
+        this.reconnectAttempts++;
 
-    if (!isConnected && errorMessage) {
-        messageElement.textContent = errorMessage;
-        banner.style.display = 'block';
+        // Implement exponential backoff for reconnection attempts
+        if (this.reconnectAttempts <= 3) {
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 10000);
+            console.log(`Attempting reconnection ${this.reconnectAttempts}/3 in ${delay}ms`);
 
-        // Auto-hide banner after 10 seconds
-        setTimeout(() => {
-            if (banner.style.display === 'block') {
-                banner.style.display = 'none';
+            setTimeout(() => {
+                this.checkConnection();
+            }, delay);
+        } else {
+            console.error('Max reconnection attempts reached');
+            this.showMessage('Unable to connect to server. Please check your connection and refresh the page.', 'error');
+        }
+    }
+
+    async checkDetailedHealth() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/health/detailed`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                signal: AbortSignal.timeout(15000) // 15 second timeout for detailed check
+            });
+
+            if (response.ok) {
+                const healthData = await response.json();
+                console.log('Detailed health check:', healthData);
+
+                // Update UI with service-specific status
+                this.updateDetailedHealthStatus(healthData);
+
+                return healthData;
+            } else {
+                throw new Error(`Detailed health check failed: ${response.status}`);
             }
-        }, 10000);
-    } else if (isConnected) {
-        banner.style.display = 'none';
-    }
-}
-
-handleConnectionError() {
-    this.reconnectAttempts++;
-
-    // Implement exponential backoff for reconnection attempts
-    if (this.reconnectAttempts <= 3) {
-        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 10000);
-        console.log(`Attempting reconnection ${this.reconnectAttempts}/3 in ${delay}ms`);
-
-        setTimeout(() => {
-            this.checkConnection();
-        }, delay);
-    } else {
-        console.error('Max reconnection attempts reached');
-        this.showMessage('Unable to connect to server. Please check your connection and refresh the page.', 'error');
-    }
-}
-
-async checkDetailedHealth() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/health/detailed`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            signal: AbortSignal.timeout(15000) // 15 second timeout for detailed check
-        });
-
-        if (response.ok) {
-            const healthData = await response.json();
-            console.log('Detailed health check:', healthData);
-
-            // Update UI with service-specific status
-            this.updateDetailedHealthStatus(healthData);
-
-            return healthData;
-        } else {
-            throw new Error(`Detailed health check failed: ${response.status}`);
+        } catch (error) {
+            console.error('Detailed health check failed:', error);
+            return null;
         }
-    } catch (error) {
-        console.error('Detailed health check failed:', error);
-        return null;
     }
-}
 
-updateDetailedHealthStatus(healthData) {
-    // You can add UI elements to show detailed service status
-    const services = healthData.services || {};
+    updateDetailedHealthStatus(healthData) {
+        // You can add UI elements to show detailed service status
+        const services = healthData.services || {};
 
-    // Example: Update a detailed status panel (if you add one to your HTML)
-    const statusPanel = document.getElementById('detailedStatusPanel');
-    if (statusPanel) {
-        let statusHtml = '<div class="service-status">';
+        // Example: Update a detailed status panel (if you add one to your HTML)
+        const statusPanel = document.getElementById('detailedStatusPanel');
+        if (statusPanel) {
+            let statusHtml = '<div class="service-status">';
 
-        Object.entries(services).forEach(([serviceName, serviceData]) => {
-            const statusClass = serviceData.status === 'healthy' ? 'text-success' : 'text-danger';
-            const statusIcon = serviceData.status === 'healthy' ? 'fa-check-circle' : 'fa-exclamation-triangle';
+            Object.entries(services).forEach(([serviceName, serviceData]) => {
+                const statusClass = serviceData.status === 'healthy' ? 'text-success' : 'text-danger';
+                const statusIcon = serviceData.status === 'healthy' ? 'fa-check-circle' : 'fa-exclamation-triangle';
 
-            statusHtml += `
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="text-capitalize">${serviceName}:</span>
-                    <span class="${statusClass}">
-                        <i class="fas ${statusIcon}"></i> ${serviceData.status}
-                    </span>
-                </div>
-            `;
+                statusHtml += `
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-capitalize">${serviceName}:</span>
+                        <span class="${statusClass}">
+                            <i class="fas ${statusIcon}"></i> ${serviceData.status}
+                        </span>
+                    </div>
+                `;
 
-            if (serviceData.error) {
-                statusHtml += `<div class="text-muted small mb-2">${serviceData.error}</div>`;
+                if (serviceData.error) {
+                    statusHtml += `<div class="text-muted small mb-2">${serviceData.error}</div>`;
+                }
+            });
+
+            statusHtml += '</div>';
+            statusPanel.innerHTML = statusHtml;
+        }
+    }
+
+    // Periodic health checks with smart intervals
+    startPeriodicHealthChecks() {
+        // Initial health check
+        this.checkConnection();
+
+        // Set up periodic checks with different intervals based on connection status
+        this.healthCheckInterval = setInterval(() => {
+            if (this.isConnected) {
+                // Less frequent checks when connected
+                this.checkConnection();
+            } else {
+                // More frequent checks when disconnected
+                this.checkConnection();
             }
-        });
+        }, this.isConnected ? 30000 : 10000); // 30s when connected, 10s when disconnected
 
-        statusHtml += '</div>';
-        statusPanel.innerHTML = statusHtml;
+        // Detailed health check every 5 minutes
+        setInterval(() => {
+            if (this.isConnected) {
+                this.checkDetailedHealth();
+            }
+        }, 300000); // 5 minutes
     }
-}
 
-// Periodic health checks with smart intervals
-startPeriodicHealthChecks() {
-    // Initial health check
-    this.checkConnection();
+        // Manual health check trigger (for refresh button)
+    async refreshHealthStatus() {
+        try {
+            this.showMessage('Checking connection...', 'info');
 
-    // Set up periodic checks with different intervals based on connection status
-    this.healthCheckInterval = setInterval(() => {
-        if (this.isConnected) {
-            // Less frequent checks when connected
-            this.checkConnection();
-        } else {
-            // More frequent checks when disconnected
-            this.checkConnection();
+            const statusIndicator = document.getElementById('statusIndicator');
+            if (statusIndicator) {
+                statusIndicator.classList.remove('connected', 'disconnected');
+                statusIndicator.classList.add('connecting');
+                statusIndicator.querySelector('.status-text').textContent = 'Checking...';
+            }
+
+            await this.checkConnection();
+
+            if (this.isConnected) {
+                this.showMessage('Connection verified', 'success');
+                // Also refresh other data
+                await Promise.all([
+                    this.loadStats(),
+                    this.loadPDFs()
+                ]);
+            }
+        } catch (error) {
+            this.showMessage('Connection check failed', 'error');
         }
-    }, this.isConnected ? 30000 : 10000); // 30s when connected, 10s when disconnected
-
-    // Detailed health check every 5 minutes
-    setInterval(() => {
-        if (this.isConnected) {
-            this.checkDetailedHealth();
-        }
-    }, 300000); // 5 minutes
-}
-
-// Manual health check trigger (for refresh button)
-async refreshHealthStatus() {
-    try {
-        this.showMessage('Checking connection...', 'info');
-
-        const statusIndicator = document.getElementById('statusIndicator');
-        if (statusIndicator) {
-            statusIndicator.classList.remove('connected', 'disconnected');
-            statusIndicator.classList.add('connecting');
-            statusIndicator.querySelector('.status-text').textContent = 'Checking...';
-        }
-
-        await this.checkConnection();
-
-        if (this.isConnected) {
-            this.showMessage('Connection verified', 'success');
-            // Also refresh other data
-            await Promise.all([
-                this.loadStats(),
-                this.loadPDFs()
-            ]);
-        }
-    } catch (error) {
-        this.showMessage('Connection check failed', 'error');
     }
-}
-
-
 
     async loadStats() {
         try {
@@ -649,7 +648,7 @@ async refreshHealthStatus() {
                 await this.loadStats();
             } else {
                 const error = await response.json();
-                                this.showMessage(`Bulk upload failed: ${error.detail || error.error || 'Unknown error'}`, 'error');
+                this.showMessage(`Bulk upload failed: ${error.detail || error.error || 'Unknown error'}`, 'error');
             }
         } catch (error) {
             console.error('Bulk upload error:', error);
@@ -839,7 +838,7 @@ async refreshHealthStatus() {
         }
     }
 
-    addChatMessage(content, type, variant = '') {
+        addChatMessage(content, type, variant = '') {
         const chatContainer = document.getElementById('chatContainer');
         if (!chatContainer) return;
 
@@ -884,45 +883,45 @@ async refreshHealthStatus() {
     }
 
     addRAGResponse(result) {
-    const content = `
-        <div class="rag-response">
-            <div class="mb-3">
-                <strong>Answer:</strong>
-                <div class="mt-2">${result.answer || 'No answer generated'}</div>
-            </div>
-            ${result.sources && result.sources.length > 0 ? `
-                <div class="sources">
-                    <strong>Sources (${result.sources.length}):</strong>
-                    <div class="mt-2">
-                        ${result.sources.map((source, index) => `
-                            <div class="source-item small bg-white p-2 rounded border mb-2">
-                                <div class="d-flex justify-content-between align-items-start mb-1">
-                                    <div class="fw-bold">${source.title || source.filename || 'Unknown Document'}</div>
-                                    <small class="text-muted">Score: ${source.score || 0}%</small>
+        const content = `
+            <div class="rag-response">
+                <div class="mb-3">
+                    <strong>Answer:</strong>
+                    <div class="mt-2">${result.answer || 'No answer generated'}</div>
+                </div>
+                ${result.sources && result.sources.length > 0 ? `
+                    <div class="sources">
+                        <strong>Sources (${result.sources.length}):</strong>
+                        <div class="mt-2">
+                            ${result.sources.map((source, index) => `
+                                <div class="source-item small bg-white p-2 rounded border mb-2">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <div class="fw-bold">${source.title || source.filename || 'Unknown Document'}</div>
+                                        <small class="text-muted">Score: ${source.score || 0}%</small>
+                                    </div>
+                                    <div class="text-muted mb-1">${source.content || 'No content available'}</div>
+                                    <div class="small">
+                                        <span class="badge bg-secondary me-1">${source.category || 'Uncategorized'}</span>
+                                        <span class="text-muted">Page ${source.page_number || 1}</span>
+                                    </div>
                                 </div>
-                                <div class="text-muted mb-1">${source.content || 'No content available'}</div>
-                                <div class="small">
-                                    <span class="badge bg-secondary me-1">${source.category || 'Uncategorized'}</span>
-                                    <span class="text-muted">Page ${source.page_number || 1}</span>
-                                </div>
-                            </div>
-                        `).join('')}
+                            `).join('')}
+                        </div>
                     </div>
-                </div>
-            ` : '<div class="text-muted small mt-2">No sources found</div>'}
-            ${result.confidence_score ? `
-                <div class="mt-2">
-                    <small class="text-muted">
-                        Confidence: ${result.confidence_score}% | 
-                        Processing time: ${result.processing_time || 0}s
-                    </small>
-                </div>
-            ` : ''}
-        </div>
-    `;
+                ` : '<div class="text-muted small mt-2">No sources found</div>'}
+                ${result.confidence_score ? `
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            Confidence: ${result.confidence_score}% | 
+                            Processing time: ${result.processing_time || 0}s
+                        </small>
+                    </div>
+                ` : ''}
+            </div>
+        `;
 
-    this.addChatMessage(content, 'assistant');
-}
+        this.addChatMessage(content, 'assistant');
+    }
 
     addSearchResults(results) {
         if (!results.results || results.results.length === 0) {
@@ -1064,7 +1063,7 @@ async refreshHealthStatus() {
             }
         });
 
-                if (invalidFiles.length > 0) {
+        if (invalidFiles.length > 0) {
             this.showMessage(`${invalidFiles.length} files are invalid and will be skipped.`, 'warning');
         }
 
@@ -1216,8 +1215,7 @@ async refreshHealthStatus() {
             const response = await fetch(`${API_BASE_URL}/pdf/${id}`, {
                 method: 'DELETE'
             });
-
-            if (response.ok) {
+                        if (response.ok) {
                 this.showMessage('File deleted successfully', 'success');
 
                 const modal = document.getElementById('fileDetailsModal');
@@ -1530,5 +1528,4 @@ window.addEventListener('unhandledrejection', (event) => {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = RAGChatApp;
 }
-
 
