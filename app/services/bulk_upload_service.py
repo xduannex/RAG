@@ -8,9 +8,9 @@ import shutil
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from app.models.database_models import PDFDocument
+from app.models.database_models import Document
 from app.models.bulk_models import BulkUploadStatus, FileUploadResult, BulkUploadResponse
-from app.services.pdf_processor import PDFProcessor
+from app.services.document_processor import DocumentProcessor
 from app.utils.file_utils import FileUtils
 from app.config.settings import settings
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class BulkUploadService:
     def __init__(self):
         self.active_uploads: Dict[str, Dict[str, Any]] = {}
-        self.pdf_processor = PDFProcessor()
+        self.pdf_processor = DocumentProcessor()
 
     async def start_bulk_upload(
             self,
@@ -180,7 +180,7 @@ class BulkUploadService:
             metadata = self.pdf_processor.get_pdf_metadata(file_path)
 
             # Create database record
-            pdf_doc = PDFDocument(
+            pdf_doc = Document(
                 filename=file.filename,
                 file_path=file_path,
                 file_size=metadata["file_size"],

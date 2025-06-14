@@ -2,60 +2,52 @@ import logging
 from typing import List, Dict, Any, Optional
 from app.services.chroma_service import ChromaService
 from app.services.ollama_service import OllamaService
-import time
 
 logger = logging.getLogger(__name__)
 
 
-class RAGResponse:
-    def __init__(self, answer: str, sources: List[Dict], confidence_score: float = 0.0, processing_time: float = 0.0):
-        self.answer = answer
-        self.sources = sources or []
-        self.confidence_score = confidence_score
-        self.processing_time = processing_time
-
-
 class RAGService:
     def __init__(self):
-        self.chroma_service = None
-        self.ollama_service = None
+        self.chroma_service = ChromaService()
+        self.ollama_service = OllamaService()
         self._initialized = False
 
     async def initialize(self):
-        """Initialize the RAG service components"""
+        """Initialize the RAG service"""
         try:
+            if self._initialized:
+                return True
+
             logger.info("Initializing RAG service...")
 
             # Initialize ChromaDB
-            self.chroma_service = ChromaService()
-            await self.chroma_service.initialize()
+            chroma_success = await self.chroma_service.initialize()
+            if not chroma_success:
+                logger.error("Failed to initialize ChromaDB")
+                return False
 
-            # Initialize Ollama (optional)
-            try:
-                self.ollama_service = OllamaService()
-                ollama_available = await self.ollama_service.health_check()
-                if ollama_available:
-                    logger.info("Ollama service is available")
-                else:
-                    logger.warning("Ollama service is not available - will use fallback responses")
-                    self.ollama_service = None
-            except Exception as e:
-                logger.warning(f"Could not initialize Ollama: {e}")
-                self.ollama_service = None
+            # Initialize Ollama
+            ollama_success = await self.ollama_service.initialize()
+            if not ollama_success:
+                logger.warning("Ollama service not available - RAG will work with search only")
 
             self._initialized = True
             logger.info("RAG service initialized successfully")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to initialize RAG service: {e}")
-            raise
+            return False
 
     async def search_documents(
             self,
             query: str,
-            limit: int = 10,  # Keep this as 'limit' for external API
+            limit: int = 10,
             pdf_ids: Optional[List[int]] = None,
-            category: Optional[str] = None
+            document_ids: Optional[List[int]] = None,
+            category: Optional[str] = None,
+            file_types: Optional[List[str]] = None,
+            similarity_threshold: float = 0.0
     ) -> List[Dict[str, Any]]:
         """Search for relevant documents"""
         try:
@@ -68,12 +60,13 @@ class RAGService:
 
             logger.info(f"Searching for query: '{query}' with limit: {limit}")
 
-            # Search using ChromaDB - use n_results instead of limit
+            # Search using ChromaDB - match the interface
             results = await self.chroma_service.search_documents(
                 query=query,
-                n_results=limit,  # Changed from limit to n_results
+                n_results=limit,
                 pdf_ids=pdf_ids,
-                category=category
+                category=category,
+                similarity_threshold=similarity_threshold
             )
 
             if not results:
@@ -84,37 +77,30 @@ class RAGService:
             formatted_results = []
             for i, result in enumerate(results):
                 try:
-                    # Handle different result formats
                     if isinstance(result, dict):
                         formatted_result = {
                             "id": result.get("id", f"result_{i}"),
-                            "content": result.get("content", result.get("text", "No content available")),
-                            "filename": result.get("filename", result.get("source", "Unknown document")),
+                            "content": result.get("content", "No content available"),
+                            "text": result.get("content", "No content available"),
+                            "filename": result.get("filename", "Unknown document"),
                             "title": result.get("title", result.get("filename", "Untitled")),
                             "category": result.get("category", "Uncategorized"),
                             "page_number": result.get("page_number", 1),
-                            "pdf_id": result.get("pdf_id", 0),
-                            "score": float(result.get("score", result.get("distance", 0.0))),
-                            "relevance_score": float(result.get("relevance_score", result.get("score", 0.0)))
+                            "document_id": result.get("document_id", 0),
+                            "pdf_id": result.get("document_id", 0),
+                            "score": float(result.get("similarity_score", 0.0)),
+                            "similarity_score": float(result.get("similarity_score", 0.0)),
+                            "distance": float(result.get("distance", 0.0)),
+                            "file_type": result.get("file_type", "unknown"),
+                            "chunk_index": result.get("chunk_index", 0),
+                            "metadata": result.get("metadata", {})
                         }
+                        formatted_results.append(formatted_result)
                     else:
-                        # Handle string or other formats
-                        formatted_result = {
-                            "id": f"result_{i}",
-                            "content": str(result)[:500] + "..." if len(str(result)) > 500 else str(result),
-                            "filename": "Unknown document",
-                            "title": "Search Result",
-                            "category": "Uncategorized",
-                            "page_number": 1,
-                            "pdf_id": 0,
-                            "score": 0.0,
-                            "relevance_score": 0.0
-                        }
-
-                    formatted_results.append(formatted_result)
+                        logger.warning(f"Unexpected result format: {type(result)}")
 
                 except Exception as e:
-                    logger.warning(f"Error formatting search result {i}: {e}")
+                    logger.error(f"Error formatting result {i}: {e}")
                     continue
 
             logger.info(f"Formatted {len(formatted_results)} search results")
@@ -126,119 +112,122 @@ class RAGService:
 
     async def generate_rag_response(
             self,
-            question: str,
+            query: str,
+            max_results: int = 5,
+            model: str = "llama2",
             pdf_ids: Optional[List[int]] = None,
-            category: Optional[str] = None,
-            max_context_chunks: int = 5
-    ) -> RAGResponse:
-        """Generate RAG response with proper formatting"""
-        start_time = time.time()
-
+            document_ids: Optional[List[int]] = None,
+            category: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Generate RAG response with context"""
         try:
             if not self._initialized:
                 await self.initialize()
 
-            logger.info(f"Generating RAG response for: '{question}'")
-
-            # Step 1: Search for relevant documents
+            # Search for relevant documents
             search_results = await self.search_documents(
-                query=question,
-                limit=max_context_chunks,
+                query=query,
+                limit=max_results,
                 pdf_ids=pdf_ids,
                 category=category
             )
 
             if not search_results:
-                logger.warning("No relevant documents found for RAG response")
-                return RAGResponse(
-                    answer="I couldn't find any relevant information in the documents to answer your question.",
-                    sources=[],
-                    confidence_score=0.0,
-                    processing_time=time.time() - start_time
-                )
+                return {
+                    "query": query,
+                    "answer": "I couldn't find any relevant documents to answer your question. Please make sure documents are uploaded and processed.",
+                    "context": "",
+                    "sources": [],
+                    "model_used": model
+                }
 
-            # Step 2: Prepare context from search results
+            # Build context from search results
             context_parts = []
             sources = []
 
-            for i, result in enumerate(search_results[:max_context_chunks]):
-                # Add to context
-                doc_context = f"Document {i + 1} ({result['filename']}):\n{result['content']}\n"
-                context_parts.append(doc_context)
+            for result in search_results:
+                context_parts.append(f"Source: {result['filename']}\nContent: {result['content']}\n")
+                sources.append({
+                    "filename": result['filename'],
+                    "title": result['title'],
+                    "page_number": result['page_number'],
+                    "similarity_score": result['similarity_score'],
+                    "document_id": result['document_id']
+                })
 
-                # Format source properly
-                source = {
-                    "id": result.get("id", f"source_{i}"),
-                    "title": result.get("title", result.get("filename", "Unknown Document")),
-                    "filename": result.get("filename", "Unknown Document"),
-                    "content": result.get("content", "No content available")[:200] + "...",
-                    "page_number": result.get("page_number", 1),
-                    "category": result.get("category", "Uncategorized"),
-                    "pdf_id": result.get("pdf_id", 0),
-                    "relevance_score": result.get("relevance_score", 0.0),
-                    "score": result.get("score", 0.0)
-                }
-                sources.append(source)
+            context = "\n".join(context_parts)
 
-            context = "\n\n".join(context_parts)
-
-            # Step 3: Generate answer using Ollama or fallback
-            if self.ollama_service:
+            # Generate answer using Ollama if available
+            if self.ollama_service and await self.ollama_service.is_available():
                 try:
-                    logger.info("Generating answer using Ollama...")
-                    answer = await self.ollama_service.generate_answer(question, context)
-                    confidence_score = 0.8  # High confidence when using LLM
+                    prompt = f"""Based on the following context, please answer the question. If the context doesn't contain enough information to answer the question, say so clearly.
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
+
+                    response = await self.ollama_service.generate_response(
+                        prompt=prompt,
+                        model=model
+                    )
+
+                    answer = response.get("response", "I couldn't generate a response.")
 
                 except Exception as e:
-                    logger.warning(f"Ollama generation failed: {e}, using fallback")
-                    answer = self._generate_fallback_answer(question, search_results)
-                    confidence_score = 0.5  # Medium confidence for fallback
+                    logger.error(f"Error generating Ollama response: {e}")
+                    answer = f"I found relevant information but couldn't generate a complete response. Here's what I found: {context[:500]}..."
+
             else:
-                logger.info("Using fallback answer generation")
-                answer = self._generate_fallback_answer(question, search_results)
-                confidence_score = 0.5
+                # Fallback: provide context-based answer without LLM
+                answer = f"Based on the documents, here's the relevant information I found:\n\n{context[:1000]}..."
 
-            processing_time = time.time() - start_time
-
-            logger.info(f"RAG response generated successfully in {processing_time:.2f}s")
-
-            return RAGResponse(
-                answer=answer,
-                sources=sources,
-                confidence_score=confidence_score,
-                processing_time=processing_time
-            )
+            return {
+                "query": query,
+                "answer": answer,
+                "context": context,
+                "sources": sources,
+                "model_used": model,
+                "total_sources": len(sources)
+            }
 
         except Exception as e:
             logger.error(f"Error generating RAG response: {e}")
-            return RAGResponse(
-                answer=f"I encountered an error while processing your question: {str(e)}",
-                sources=[],
-                confidence_score=0.0,
-                processing_time=time.time() - start_time
+            return {
+                "query": query,
+                "answer": f"An error occurred while processing your question: {str(e)}",
+                "context": "",
+                "sources": [],
+                "model_used": model,
+                "error": str(e)
+            }
+
+    async def get_similar_documents(
+            self,
+            document_id: int,
+            limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Find documents similar to a given document"""
+        try:
+            if not self._initialized:
+                await self.initialize()
+
+            # Search for documents excluding the current one
+            results = await self.chroma_service.search_documents(
+                query="",
+                n_results=limit + 1
             )
 
-    def _generate_fallback_answer(self, question: str, search_results: List[Dict]) -> str:
-        """Generate a fallback answer when Ollama is not available"""
-        if not search_results:
-            return "I couldn't find any relevant information to answer your question."
+            # Filter out the current document
+            similar_docs = [
+                result for result in results
+                if result.get("document_id") != document_id
+            ][:limit]
 
-        # Create a simple answer from search results
-        answer_parts = [
-            f"Based on the available documents, here's what I found related to your question:"
-        ]
+            return similar_docs
 
-        for i, result in enumerate(search_results[:3]):  # Use top 3 results
-            content = result.get("content", "No content available")
-            filename = result.get("filename", "Unknown document")
-
-            # Truncate content if too long
-            if len(content) > 200:
-                content = content[:200] + "..."
-
-            answer_parts.append(f"\nFrom {filename}:\n{content}")
-
-        if len(search_results) > 3:
-            answer_parts.append(f"\n(And {len(search_results) - 3} more relevant documents found)")
-
-        return "\n".join(answer_parts)
+        except Exception as e:
+            logger.error(f"Error finding similar documents: {e}")
+            return []
