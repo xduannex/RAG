@@ -345,8 +345,11 @@ async function performRAGQuery(query) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                query: query,
-                max_results: 5
+                query: query,  // or question: query, depending on your backend
+                max_results: 5,
+                similarity_threshold: 0.0,  // Add this for better results
+                model: "llama3.2:latest",
+                include_context: true
             })
         });
 
@@ -1839,4 +1842,23 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
 
 // Initialize application state
 console.log('RAG Chat Application script loaded successfully');
+
+async function testRAGQuery() {
+    try {
+        console.log('Testing RAG query...');
+        const result = await performRAGQuery('Dennis');
+        console.log('Test successful:', result);
+        return result;
+    } catch (error) {
+        console.error('Test failed:', error);
+        throw error;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, running RAG test...');
+    testRAGQuery().catch(err => console.error('Auto-test failed:', err));
+});
+
+
 

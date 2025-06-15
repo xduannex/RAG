@@ -1,233 +1,297 @@
 import logging
-from typing import List, Dict, Any, Optional
-from app.services.chroma_service import ChromaService
-from app.services.ollama_service import OllamaService
+from typing import Dict, Any, List, Optional
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    def __init__(self):
-        self.chroma_service = ChromaService()
-        self.ollama_service = OllamaService()
+    def __init__(self, chroma_service=None, ollama_service=None):
+        """Initialize RAG service with optional services"""
+        self.chroma_service = chroma_service
+        self.ollama_service = ollama_service
         self._initialized = False
 
     async def initialize(self):
         """Initialize the RAG service"""
-        try:
-            if self._initialized:
-                return True
-
+        if not self._initialized:
             logger.info("Initializing RAG service...")
-
-            # Initialize ChromaDB
-            chroma_success = await self.chroma_service.initialize()
-            if not chroma_success:
-                logger.error("Failed to initialize ChromaDB")
-                return False
-
-            # Initialize Ollama
-            ollama_success = await self.ollama_service.initialize()
-            if not ollama_success:
-                logger.warning("Ollama service not available - RAG will work with search only")
-
             self._initialized = True
-            logger.info("RAG service initialized successfully")
-            return True
+        return True
 
-        except Exception as e:
-            logger.error(f"Failed to initialize RAG service: {e}")
-            return False
-
-    async def search_documents(
-            self,
-            query: str,
-            limit: int = 10,
-            pdf_ids: Optional[List[int]] = None,
-            document_ids: Optional[List[int]] = None,
-            category: Optional[str] = None,
-            file_types: Optional[List[str]] = None,
-            similarity_threshold: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """Search for relevant documents"""
-        try:
-            if not self._initialized:
-                await self.initialize()
-
-            if not self.chroma_service:
-                logger.error("ChromaDB service not available")
-                return []
-
-            logger.info(f"Searching for query: '{query}' with limit: {limit}")
-
-            # Search using ChromaDB - match the interface
-            results = await self.chroma_service.search_documents(
-                query=query,
-                n_results=limit,
-                pdf_ids=pdf_ids,
-                category=category,
-                similarity_threshold=similarity_threshold
-            )
-
-            if not results:
-                logger.warning("No search results found in ChromaDB")
-                return []
-
-            # Format results properly
-            formatted_results = []
-            for i, result in enumerate(results):
-                try:
-                    if isinstance(result, dict):
-                        formatted_result = {
-                            "id": result.get("id", f"result_{i}"),
-                            "content": result.get("content", "No content available"),
-                            "text": result.get("content", "No content available"),
-                            "filename": result.get("filename", "Unknown document"),
-                            "title": result.get("title", result.get("filename", "Untitled")),
-                            "category": result.get("category", "Uncategorized"),
-                            "page_number": result.get("page_number", 1),
-                            "document_id": result.get("document_id", 0),
-                            "pdf_id": result.get("document_id", 0),
-                            "score": float(result.get("similarity_score", 0.0)),
-                            "similarity_score": float(result.get("similarity_score", 0.0)),
-                            "distance": float(result.get("distance", 0.0)),
-                            "file_type": result.get("file_type", "unknown"),
-                            "chunk_index": result.get("chunk_index", 0),
-                            "metadata": result.get("metadata", {})
-                        }
-                        formatted_results.append(formatted_result)
-                    else:
-                        logger.warning(f"Unexpected result format: {type(result)}")
-
-                except Exception as e:
-                    logger.error(f"Error formatting result {i}: {e}")
-                    continue
-
-            logger.info(f"Formatted {len(formatted_results)} search results")
-            return formatted_results
-
-        except Exception as e:
-            logger.error(f"Error in search_documents: {e}")
-            return []
+    def set_services(self, chroma_service=None, ollama_service=None):
+        """Set services after initialization"""
+        if chroma_service:
+            self.chroma_service = chroma_service
+        if ollama_service:
+            self.ollama_service = ollama_service
+        self._initialized = True
+        logger.info("RAG service updated with new services")
 
     async def generate_rag_response(
             self,
             query: str,
             max_results: int = 5,
-            model: str = "llama2",
-            pdf_ids: Optional[List[int]] = None,
+            model: str = "llama3.2:latest",
             document_ids: Optional[List[int]] = None,
-            category: Optional[str] = None
+            category: Optional[str] = None,
+            similarity_threshold: float = 0.3  # Add this parameter
     ) -> Dict[str, Any]:
-        """Generate RAG response with context"""
+        """Generate RAG response with the expected method signature"""
         try:
-            if not self._initialized:
-                await self.initialize()
+            logger.info(f"Processing RAG query: '{query}' with max_results: {max_results}")
 
-            # Search for relevant documents
-            search_results = await self.search_documents(
+            # Check if we have ChromaDB service
+            if not self.chroma_service:
+                return {
+                    "success": False,
+                    "message": "ChromaDB service not available",
+                    "query": query,
+                    "sources": [],
+                    "answer": "Search service is not available at the moment.",
+                    "total_sources": 0
+                }
+
+            # Step 1: Search relevant documents
+            search_results = await self.chroma_service.search_documents(
                 query=query,
-                limit=max_results,
-                pdf_ids=pdf_ids,
-                category=category
+                n_results=max_results,
+                pdf_ids=document_ids,  # Use document_ids as pdf_ids for backward compatibility
+                similarity_threshold=similarity_threshold  # USE THE PARAMETER HERE!
             )
 
             if not search_results:
                 return {
+                    "success": False,
+                    "message": "No relevant documents found",
                     "query": query,
-                    "answer": "I couldn't find any relevant documents to answer your question. Please make sure documents are uploaded and processed.",
-                    "context": "",
                     "sources": [],
-                    "model_used": model
+                    "answer": "I couldn't find any relevant information to answer your question.",
+                    "total_sources": 0
                 }
 
-            # Build context from search results
-            context_parts = []
-            sources = []
+            logger.info(f"Found {len(search_results)} relevant results")
 
-            for result in search_results:
-                context_parts.append(f"Source: {result['filename']}\nContent: {result['content']}\n")
-                sources.append({
-                    "filename": result['filename'],
-                    "title": result['title'],
-                    "page_number": result['page_number'],
-                    "similarity_score": result['similarity_score'],
-                    "document_id": result['document_id']
-                })
+            # Step 2: Format context from search results
+            context = self.format_context(search_results)
+            logger.info(f"Formatted {len(search_results)} search results")
 
-            context = "\n".join(context_parts)
+            # Step 3: Generate response using Ollama
+            answer = "Based on the search results, I found relevant information but cannot generate a comprehensive answer without Ollama service."
 
-            # Generate answer using Ollama if available
-            if self.ollama_service and await self.ollama_service.is_available():
+            # Check if Ollama is available
+            if self.ollama_service and hasattr(self.ollama_service, 'is_available') and self.ollama_service.is_available:
                 try:
-                    prompt = f"""Based on the following context, please answer the question. If the context doesn't contain enough information to answer the question, say so clearly.
-
-Context:
-{context}
-
-Question: {query}
-
-Answer:"""
-
-                    response = await self.ollama_service.generate_response(
-                        prompt=prompt,
-                        model=model
+                    logger.info("Generating response using Ollama...")
+                    ollama_response = await self.ollama_service.generate_response(
+                        prompt=query,
+                        model=model,
+                        context=context
                     )
 
-                    answer = response.get("response", "I couldn't generate a response.")
+                    if ollama_response.get("success"):
+                        answer = ollama_response.get("response", "No response generated")
+                        logger.info("✅ RAG response generated successfully")
+                    else:
+                        error_msg = ollama_response.get("error", "Unknown error")
+                        logger.warning(f"Ollama generation failed: {error_msg}")
+                        answer = f"I found relevant information but encountered an error generating the response: {error_msg}"
 
                 except Exception as e:
-                    logger.error(f"Error generating Ollama response: {e}")
-                    answer = f"I found relevant information but couldn't generate a complete response. Here's what I found: {context[:500]}..."
-
+                    logger.error(f"Error calling Ollama service: {e}")
+                    answer = "I found relevant information but encountered an error generating the response."
             else:
-                # Fallback: provide context-based answer without LLM
-                answer = f"Based on the documents, here's the relevant information I found:\n\n{context[:1000]}..."
+                logger.info("Ollama service not available, returning search-only results")
+                answer = self.generate_search_summary(search_results, query)
 
             return {
+                "success": True,
                 "query": query,
                 "answer": answer,
+                "sources": self.format_sources(search_results),
                 "context": context,
-                "sources": sources,
-                "model_used": model,
-                "total_sources": len(sources)
+                "total_sources": len(search_results),
+                "model_used": model if self.ollama_service and hasattr(self.ollama_service, 'is_available') and self.ollama_service.is_available else "search-only"
             }
 
         except Exception as e:
             logger.error(f"Error generating RAG response: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+
             return {
+                "success": False,
+                "error": str(e),
                 "query": query,
-                "answer": f"An error occurred while processing your question: {str(e)}",
-                "context": "",
+                "answer": "I encountered an error while processing your question. Please try again.",
                 "sources": [],
-                "model_used": model,
-                "error": str(e)
+                "total_sources": 0
             }
 
-    async def get_similar_documents(
+    async def search_and_generate(
             self,
-            document_id: int,
-            limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """Find documents similar to a given document"""
-        try:
-            if not self._initialized:
-                await self.initialize()
+            query: str,
+            n_results: int = 5,
+            model: str = "llama3.2:latest",
+            pdf_ids: Optional[List[int]] = None,
+            similarity_threshold: float = 0.3
+    ) -> Dict[str, Any]:
+        """Search documents and generate RAG response (backward compatibility)"""
+        return await self.generate_rag_response(
+            query=query,
+            max_results=n_results,
+            model=model,
+            document_ids=pdf_ids
+        )
 
-            # Search for documents excluding the current one
-            results = await self.chroma_service.search_documents(
-                query="",
-                n_results=limit + 1
+    async def search_only(
+            self,
+            query: str,
+            n_results: int = 10,
+            pdf_ids: Optional[List[int]] = None,
+            similarity_threshold: float = 0.3
+    ) -> Dict[str, Any]:
+        """Search documents without generating response"""
+        try:
+            logger.info(f"Processing search-only query: '{query}'")
+
+            if not self.chroma_service:
+                return {
+                    "success": False,
+                    "message": "ChromaDB service not available",
+                    "query": query,
+                    "results": []
+                }
+
+            # Search relevant documents
+            search_results = await self.chroma_service.search_documents(
+                query=query,
+                n_results=n_results,
+                pdf_ids=pdf_ids,
+                similarity_threshold=similarity_threshold
             )
 
-            # Filter out the current document
-            similar_docs = [
-                result for result in results
-                if result.get("document_id") != document_id
-            ][:limit]
-
-            return similar_docs
+            return {
+                "success": True,
+                "query": query,
+                "results": search_results,
+                "total_results": len(search_results),
+                "sources": self.format_sources(search_results)
+            }
 
         except Exception as e:
-            logger.error(f"Error finding similar documents: {e}")
+            logger.error(f"Error in search-only: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "query": query,
+                "results": []
+            }
+
+    def format_context(self, search_results: List[Dict[str, Any]]) -> str:
+        """Format search results into context for LLM"""
+        try:
+            if not search_results:
+                return ""
+
+            context_parts = []
+
+            for i, result in enumerate(search_results[:5], 1):  # Limit to top 5 results
+                content = result.get('content', '').strip()
+                filename = result.get('filename', 'Unknown document')
+                similarity = result.get('similarity_score', 0)
+
+                if content:
+                    context_part = f"[Source {i}: {filename} (relevance: {similarity:.2f})]\n{content}\n"
+                    context_parts.append(context_part)
+
+            context = "\n".join(context_parts)
+
+            # Limit context length to prevent token overflow
+            max_context_length = 4000  # Adjust based on your model's context window
+            if len(context) > max_context_length:
+                context = context[:max_context_length] + "\n[Content truncated...]"
+
+            return context
+
+        except Exception as e:
+            logger.error(f"Error formatting context: {e}")
+            return ""
+
+    def generate_search_summary(self, search_results: List[Dict[str, Any]], query: str) -> str:
+        """Generate a summary when Ollama is not available"""
+        try:
+            if not search_results:
+                return "No relevant information found."
+
+            # Create a simple summary from search results
+            summary_parts = [f"Based on your query '{query}', I found the following relevant information:\n"]
+
+            for i, result in enumerate(search_results[:3], 1):  # Top 3 results
+                content = result.get('content', '').strip()
+                filename = result.get('filename', 'Unknown document')
+                similarity = result.get('similarity_score', 0)
+
+                if content:
+                    # Truncate content for summary
+                    short_content = content[:200] + "..." if len(content) > 200 else content
+                    summary_parts.append(f"{i}. From '{filename}' (relevance: {similarity:.2f}):\n{short_content}\n")
+
+            if len(search_results) > 3:
+                summary_parts.append(f"\n...and {len(search_results) - 3} more relevant results found.")
+
+            return "\n".join(summary_parts)
+
+        except Exception as e:
+            logger.error(f"Error generating search summary: {e}")
+            return "Found relevant information but could not generate summary."
+
+    def format_sources(self, search_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Format sources for response"""
+        try:
+            sources = []
+
+            for result in search_results:
+                source = {
+                    "filename": result.get('filename', 'Unknown'),
+                    "similarity_score": result.get('similarity_score', 0),
+                    "page_number": result.get('page_number'),
+                    "chunk_index": result.get('chunk_index')
+                }
+
+                # Add document ID if available
+                if result.get('document_id'):
+                    source["document_id"] = result['document_id']
+                if result.get('pdf_id'):
+                    source["pdf_id"] = result['pdf_id']
+
+                sources.append(source)
+
+            return sources
+
+        except Exception as e:
+            logger.error(f"Error formatting sources: {e}")
             return []
+
+    async def get_search_history(
+            self,
+            limit: int = 50,
+            user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get search history (placeholder - implement with database)"""
+        # TODO: Implement search history storage and retrieval
+        return []
+
+    async def save_search_query(
+            self,
+            query: str,
+            results_count: int,
+            user_id: Optional[str] = None
+    ) -> bool:
+        """Save search query to history (placeholder - implement with database)"""
+        # TODO: Implement search history saving
+        return True
+
+
+# Create global instance that can be imported
+rag_service = RAGService()

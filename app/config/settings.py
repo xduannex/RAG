@@ -1,7 +1,7 @@
 import os
 import shutil
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic_settings import BaseSettings
 
 
@@ -197,7 +197,32 @@ class Settings(BaseSettings):
 
     def get_chroma_path(self) -> str:
         """Get ChromaDB persistence path"""
-        return str(Path(self.chroma_persist_directory).resolve())
+        chroma_path = Path(self.chroma_persist_directory).resolve()
+        # Ensure directory exists
+        chroma_path.mkdir(parents=True, exist_ok=True)
+        return str(chroma_path)
+
+        # Add method to check ChromaDB requirements
+    def check_chromadb_requirements(self) -> Dict[str, Any]:
+        """Check if ChromaDB requirements are met"""
+        try:
+            import chromadb
+            chromadb_available = True
+            chromadb_version = getattr(chromadb, '__version__', 'unknown')
+        except ImportError:
+            chromadb_available = False
+            chromadb_version = None
+
+        chroma_path = Path(self.chroma_persist_directory)
+
+        return {
+            "chromadb_available": chromadb_available,
+            "chromadb_version": chromadb_version,
+            "storage_directory_exists": chroma_path.exists(),
+            "storage_directory_writable": os.access(chroma_path.parent,
+                                                    os.W_OK) if chroma_path.parent.exists() else False,
+            "chroma_path": str(chroma_path)
+        }
 
 
 # Create global settings instance - Fix circular import

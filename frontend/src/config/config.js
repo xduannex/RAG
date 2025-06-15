@@ -47,7 +47,7 @@ module.exports = {
     search: {
         defaultLimit: 10,
         maxLimit: 100,
-        defaultSimilarityThreshold: 0.7,
+        defaultSimilarityThreshold: 0.3,
         minSimilarityThreshold: 0.1,
         maxSimilarityThreshold: 1.0,
         debounceMs: 300, // Debounce search input

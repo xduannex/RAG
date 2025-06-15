@@ -1,302 +1,271 @@
+import asyncio
 import logging
+
+import aiohttp
 import httpx
+from typing import Dict, Any, List, Optional
 import json
-from typing import Dict, Any, Optional, List
-from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
 class OllamaService:
-    def __init__(self):
-        self.base_url = getattr(settings, 'ollama_base_url', "http://localhost:11434")
-        self.client = None
-        self.available_models = []
-        self.generation_models = []  # Models that can generate text
-        self.embedding_models = []  # Models for embeddings only
-        self._initialized = False
+    def __init__(self, base_url: str = "http://localhost:11434", timeout: int = 30):
+        """Initialize Ollama service with defensive attribute setting"""
+        # Defensive attribute initialization
+        self.base_url = str(base_url).rstrip('/') if base_url else "http://localhost:11434"
+        self.timeout = int(timeout) if timeout else 30
+        self.is_available = False
+        self._client = None
 
-    def _categorize_models(self):
-        """Categorize models into generation and embedding models"""
-        self.generation_models = []
-        self.embedding_models = []
+        # Double-check attributes are set
+        if not hasattr(self, 'timeout'):
+            self.timeout = 30
+        if not hasattr(self, 'base_url'):
+            self.base_url = "http://localhost:11434"
 
-        # Known embedding model patterns (more comprehensive)
-        embedding_patterns = [
-            'embed', 'embedding', 'nomic-embed', 'sentence-transformer',
-            'bge-', 'e5-', 'gte-', 'instructor-'
-        ]
+        logger.info(f"OllamaService initialized: base_url={self.base_url}, timeout={self.timeout}")
 
-        # Known generation model families
-        generation_families = [
-            'llama', 'qwen', 'phi', 'deepseek', 'mistral', 'codellama',
-            'vicuna', 'alpaca', 'gemma', 'neural-chat', 'openchat',
-            'starling', 'zephyr', 'orca', 'wizard'
-        ]
-
-        for model in self.available_models:
-            model_lower = model.lower()
-            model_name = model_lower.split(':')[0]  # Get base name without tag
-
-            # Check if it's an embedding model first (more specific)
-            is_embedding = any(pattern in model_lower for pattern in embedding_patterns)
-
-            if is_embedding:
-                self.embedding_models.append(model)
-                logger.info(f"Categorized {model} as embedding model")
-            else:
-                # Check if it's a known generation model family
-                is_generation = any(family in model_name for family in generation_families)
-
-                if is_generation:
-                    self.generation_models.append(model)
-                    logger.info(f"Categorized {model} as generation model")
-                else:
-                    # For unknown models, try to determine by size or default to generation
-                    # Most models are generation models unless specifically embedding
-                    self.generation_models.append(model)
-                    logger.info(f"Unknown model type for {model}, defaulting to generation model")
+    def _ensure_attributes(self):
+        """Ensure all required attributes are set"""
+        if not hasattr(self, 'timeout'):
+            self.timeout = 30
+            logger.warning("timeout attribute was missing, set to default 30")
+        if not hasattr(self, 'base_url'):
+            self.base_url = "http://localhost:11434"
+            logger.warning("base_url attribute was missing, set to default")
+        if not hasattr(self, 'is_available'):
+            self.is_available = False
+        if not hasattr(self, '_client'):
+            self._client = None
 
     async def initialize(self) -> bool:
-        """Initialize Ollama service and check availability"""
+        """Initialize and test Ollama connection"""
         try:
-            if self._initialized:
-                return True
+            # Ensure attributes exist
+            self._ensure_attributes()
 
             logger.info(f"Initializing Ollama service at {self.base_url}...")
 
-            # Create HTTP client with longer timeout
-            self.client = httpx.AsyncClient(timeout=30.0)
+            # Create HTTP client with timeout
+            timeout_config = httpx.Timeout(
+                timeout=self.timeout,
+                connect=10.0,
+                read=self.timeout,
+                write=self.timeout
+            )
 
-            # Check if Ollama is available
-            is_available = await self.is_available()
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=timeout_config,
+                follow_redirects=True
+            )
 
-            if not is_available:
-                logger.warning("Ollama service not available")
-                self._initialized = False
-                return False
+            # Test connection
+            health_check = await self.health_check()
 
-            # Get available models
-            self.available_models = await self.get_available_models()
+            if health_check.get('status') == 'healthy':
+                self.is_available = True
+                logger.info("✅ Ollama service connected successfully")
 
-            if not self.available_models:
-                logger.warning("No models found in Ollama")
-                self._initialized = False
-                return False
-
-            # Categorize models BEFORE testing
-            self._categorize_models()
-
-            logger.info(f"Ollama model categorization complete:")
-            logger.info(f"  - Total models: {len(self.available_models)}")
-            logger.info(f"  - Generation models: {self.generation_models}")
-            logger.info(f"  - Embedding models: {self.embedding_models}")
-
-            # Test with a generation model if available
-            if self.generation_models:
-                test_model = self.generation_models[0]
-                logger.info(f"Testing Ollama with generation model: {test_model}")
-
+                # Try to get models
                 try:
-                    test_response = await self.generate_response(
-                        prompt="Hi",
-                        model=test_model,
-                        max_tokens=5
-                    )
-                    if not test_response.get("error"):
-                        logger.info("Ollama test generation successful")
+                    models = await self.list_models()
+                    if models:
+                        model_names = [m.get('name', 'unknown') for m in models[:3]]
+                        logger.info(f"📋 Available models: {', '.join(model_names)}")
                     else:
-                        logger.warning(f"Ollama test failed: {test_response.get('error')}")
-                        # Don't fail initialization if test fails, model might still work
+                        logger.warning("⚠️  No models found")
                 except Exception as e:
-                    logger.warning(f"Ollama test generation failed: {e}")
-                    # Don't fail initialization
-            else:
-                logger.warning("No generation models available for testing")
+                    logger.warning(f"Could not list models: {e}")
 
-            self._initialized = True
-            return len(self.generation_models) > 0  # Only succeed if we have generation models
+                return True
+            else:
+                error_msg = health_check.get('error', 'Unknown error')
+                logger.warning(f"❌ Ollama health check failed: {error_msg}")
+                return False
 
         except Exception as e:
-            logger.error(f"Failed to initialize Ollama service: {e}")
-            self._initialized = False
+            logger.error(f"❌ Failed to initialize Ollama service: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            self.is_available = False
             return False
 
-    async def is_available(self) -> bool:
-        """Check if Ollama service is available"""
+    async def health_check(self) -> Dict[str, Any]:
+        """Check if Ollama service is healthy"""
         try:
-            if not self.client:
-                self.client = httpx.AsyncClient(timeout=10.0)
+            self._ensure_attributes()
 
-            response = await self.client.get(f"{self.base_url}/api/tags")
-            available = response.status_code == 200
-            if available:
-                logger.info("Ollama service is available")
+            if not self._client:
+                return {"status": "error", "error": "Client not initialized"}
+
+            # Simple health check - just try to connect
+            response = await self._client.get("/", timeout=10.0)
+
+            if response.status_code == 200:
+                return {
+                    "status": "healthy",
+                    "base_url": self.base_url
+                }
             else:
-                logger.warning(f"Ollama service returned status: {response.status_code}")
-            return available
+                return {
+                    "status": "unhealthy",
+                    "error": f"HTTP {response.status_code}"
+                }
+
+        except httpx.ConnectError as e:
+            return {
+                "status": "unavailable",
+                "error": f"Cannot connect to Ollama at {self.base_url}: {e}"
+            }
+        except httpx.TimeoutException:
+            return {
+                "status": "timeout",
+                "error": f"Connection timeout after {getattr(self, 'timeout', 30)}s"
+            }
         except Exception as e:
-            logger.debug(f"Ollama not available: {e}")
-            return False
+            return {
+                "status": "error",
+                "error": f"Health check failed: {str(e)}"
+            }
 
-    async def get_available_models(self) -> List[str]:
-        """Get list of available models"""
+    async def list_models(self) -> List[Dict[str, Any]]:
+        """List available models"""
         try:
-            if not self.client:
-                self.client = httpx.AsyncClient(timeout=10.0)
+            self._ensure_attributes()
 
-            response = await self.client.get(f"{self.base_url}/api/tags")
+            if not self._client or not self.is_available:
+                return []
+
+            response = await self._client.get("/api/tags", timeout=10.0)
+
             if response.status_code == 200:
                 data = response.json()
-                models = [model["name"] for model in data.get("models", [])]
-                logger.info(f"Found {len(models)} total models: {models}")
-                return models
+                return data.get("models", [])
             else:
-                logger.error(f"Failed to get models: {response.status_code}")
+                logger.error(f"Failed to list models: HTTP {response.status_code}")
                 return []
+
         except Exception as e:
-            logger.error(f"Error getting available models: {e}")
+            logger.error(f"Error listing models: {e}")
             return []
-
-    def get_best_model_for_task(self, task: str = "general") -> Optional[str]:
-        """Get the best available model for a specific task"""
-        if task == "embedding":
-            if self.embedding_models:
-                best_embedding = self.embedding_models[0]
-                logger.info(f"Selected embedding model: {best_embedding}")
-                return best_embedding
-            else:
-                logger.warning("No embedding models available")
-                return None
-
-        # For generation tasks, use generation models only
-        if not self.generation_models:
-            logger.error("No generation models available")
-            return None
-
-        # Preference order for different generation tasks
-        model_preferences = {
-            "general": [
-                "llama3.2:latest",
-                "qwen2.5:latest",
-                "deepseek-r1:7b",
-                "phi3.5:latest",
-                "qwen2.5:1.5b"
-            ],
-            "coding": [
-                "qwen2.5-coder:latest",
-                "deepseek-r1:7b",
-                "qwen2.5:latest",
-                "llama3.2:latest"
-            ]
-        }
-
-        preferred_models = model_preferences.get(task, model_preferences["general"])
-
-        # Find the first available preferred model
-        for preferred in preferred_models:
-            if preferred in self.generation_models:
-                logger.info(f"Selected preferred model for {task}: {preferred}")
-                return preferred
-
-        # If no preferred model found, return the first available generation model
-        best_model = self.generation_models[0]
-        logger.info(f"Selected first available generation model: {best_model}")
-        return best_model
 
     async def generate_response(
             self,
             prompt: str,
-            model: Optional[str] = None,
-            stream: bool = False,
+            context: str = "",
+            model: str = None,
+            max_tokens: int = 500,
             temperature: float = 0.7,
-            max_tokens: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """Generate response using Ollama"""
+            top_p: float = 0.9,
+            stream: bool = False,
+            **kwargs
+    ) -> str:
+        """Generate response using Ollama with proper parameter handling"""
         try:
-            if not self.client:
-                self.client = httpx.AsyncClient(timeout=120.0)
+            if not self.is_available:
+                logger.error("Ollama service is not available")
+                raise Exception("Ollama service is not available")
 
-            # Use best available generation model if none specified
-            if not model:
-                model = self.get_best_model_for_task("general")
-                if not model:
-                    return {"error": "No generation models available"}
+            # Use default model if none specified
+            model_name = model or self.default_model
+
+            # Build the complete prompt with context
+            if context and context.strip():
+                full_prompt = f"""Context information:
+    {context}
+
+    Based on the context above, please answer the following question:
+    {prompt}
+
+    Answer:"""
             else:
-                # Validate the specified model
-                if model in self.embedding_models:
-                    logger.warning(f"Model {model} is an embedding model, switching to generation model")
-                    model = self.get_best_model_for_task("general")
-                    if not model:
-                        return {"error": "No generation models available"}
-                elif model not in self.generation_models:
-                    logger.warning(f"Model {model} not found in generation models, using best available")
-                    model = self.get_best_model_for_task("general")
-                    if not model:
-                        return {"error": "No generation models available"}
+                full_prompt = prompt
 
-            logger.info(f"Generating response with model: {model}")
-
-            payload = {
-                "model": model,
-                "prompt": prompt,
+            # Prepare request data for Ollama API
+            request_data = {
+                "model": model_name,
+                "prompt": full_prompt,
                 "stream": stream,
                 "options": {
+                    "num_predict": max_tokens,  # Ollama uses num_predict instead of max_tokens
                     "temperature": temperature,
-                    "num_ctx": 4096,
+                    "top_p": top_p,
+                    "stop": ["<|endoftext|>", "\n\nQuestion:", "\n\nContext:"],  # Stop sequences
                 }
             }
 
-            if max_tokens:
-                payload["options"]["num_predict"] = max_tokens
+            logger.info(f"🤖 Generating response with Ollama model: {model_name}")
+            logger.info(f"📝 Prompt length: {len(full_prompt)} characters")
 
-            response = await self.client.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
-                timeout=120.0
-            )
+            # Make request to Ollama API
+            timeout = aiohttp.ClientTimeout(total=60)  # 60 second timeout
 
-            if response.status_code == 200:
-                result = response.json()
-                generated_text = result.get("response", "")
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                        f"{self.base_url}/api/generate",
+                        json=request_data,
+                        headers={"Content-Type": "application/json"}
+                ) as response:
 
-                logger.info(f"Successfully generated response ({len(generated_text)} chars)")
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"❌ Ollama API error {response.status}: {error_text}")
+                        raise Exception(f"Ollama API error {response.status}: {error_text}")
 
-                return {
-                    "response": generated_text,
-                    "model": model,
-                    "done": result.get("done", True),
-                    "context": result.get("context", []),
-                    "total_duration": result.get("total_duration", 0),
-                    "load_duration": result.get("load_duration", 0),
-                    "prompt_eval_count": result.get("prompt_eval_count", 0),
-                    "eval_count": result.get("eval_count", 0)
-                }
-            else:
-                error_msg = f"Ollama API error: {response.status_code} - {response.text}"
-                logger.error(error_msg)
-                return {"error": error_msg}
+                    if stream:
+                        # Handle streaming response
+                        full_response = ""
+                        async for line in response.content:
+                            if line:
+                                try:
+                                    line_data = json.loads(line.decode('utf-8'))
+                                    if 'response' in line_data:
+                                        full_response += line_data['response']
+                                    if line_data.get('done', False):
+                                        break
+                                except json.JSONDecodeError:
+                                    continue
+
+                        result_text = full_response.strip()
+                    else:
+                        # Handle non-streaming response
+                        result = await response.json()
+                        result_text = result.get("response", "").strip()
+
+                    if not result_text:
+                        logger.warning("⚠️  Ollama returned empty response")
+                        return "I couldn't generate a response. Please try rephrasing your question."
+
+                    logger.info(f"✅ Generated response ({len(result_text)} characters)")
+                    return result_text
+
+        except aiohttp.ClientError as e:
+            logger.error(f"❌ Network error calling Ollama: {e}")
+            raise Exception(f"Network error: {e}")
+
+        except asyncio.TimeoutError:
+            logger.error("❌ Ollama request timeout")
+            raise Exception("Request timeout - Ollama took too long to respond")
+
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Invalid JSON response from Ollama: {e}")
+            raise Exception(f"Invalid response format: {e}")
 
         except Exception as e:
-            error_msg = f"Error generating response: {e}"
-            logger.error(error_msg)
-            return {"error": error_msg}
-
-    def get_model_info(self) -> Dict[str, Any]:
-        """Get information about available models"""
-        return {
-            "total_models": len(self.available_models),
-            "all_models": self.available_models,
-            "generation_models": self.generation_models,
-            "embedding_models": self.embedding_models,
-            "recommended_generation": self.get_best_model_for_task("general"),
-            "recommended_embedding": self.get_best_model_for_task("embedding"),
-            "initialized": self._initialized
-        }
+            logger.error(f"❌ Error generating response with Ollama: {e}")
+            raise Exception(f"Failed to generate response: {e}")
 
     async def close(self):
         """Close the HTTP client"""
-        if self.client:
-            await self.client.aclose()
-            self.client = None
-            logger.info("Ollama service client closed")
+        try:
+            if hasattr(self, '_client') and self._client:
+                await self._client.aclose()
+                self._client = None
+            self.is_available = False
+            logger.info("Ollama service connection closed")
+        except Exception as e:
+            logger.error(f"Error closing Ollama service: {e}")
+
+# Don't create global instance here - let main.py handle it

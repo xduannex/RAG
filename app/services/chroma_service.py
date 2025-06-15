@@ -10,11 +10,11 @@ try:
     import chromadb
     from chromadb.config import Settings as ChromaSettings
     from chromadb.utils import embedding_functions
-
     CHROMADB_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     CHROMADB_AVAILABLE = False
     chromadb = None
+    print(f"ChromaDB not available: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -28,22 +28,38 @@ class ChromaService:
         self.embedding_function = None
         self._initialized = False
 
-        # Safe settings import to avoid circular import
+        # Initialize settings with better error handling
+        self._setup_settings()
+
+        # Ensure ChromaDB directory exists
+        self._ensure_chroma_directory()
+
+    def _setup_settings(self):
+        """Setup configuration with proper fallbacks"""
         try:
             from app.config.settings import settings
             self.collection_name = getattr(settings, 'chroma_collection_name', 'rag_documents')
-            self.persist_directory = getattr(settings, 'get_chroma_path', lambda: str(
-                Path(__file__).parent.parent.parent / "storage" / "chroma_db"))()
+
+            # Try different path methods
+            if hasattr(settings, 'get_chroma_path') and callable(settings.get_chroma_path):
+                self.persist_directory = settings.get_chroma_path()
+            elif hasattr(settings, 'chroma_persist_directory'):
+                self.persist_directory = settings.chroma_persist_directory
+            elif hasattr(settings, 'chroma_db_path'):
+                self.persist_directory = settings.chroma_db_path
+            else:
+                self.persist_directory = str(Path(__file__).parent.parent.parent / "storage" / "chroma_db")
+
             self.embedding_model = getattr(settings, 'embedding_model', 'all-MiniLM-L6-v2')
+
+            logger.info(f"ChromaDB settings loaded: collection={self.collection_name}, path={self.persist_directory}")
+
         except Exception as e:
             logger.warning(f"Could not import settings, using defaults: {e}")
             # Fallback values
             self.collection_name = 'rag_documents'
             self.persist_directory = str(Path(__file__).parent.parent.parent / "storage" / "chroma_db")
             self.embedding_model = 'all-MiniLM-L6-v2'
-
-        # Ensure ChromaDB directory exists
-        self._ensure_chroma_directory()
 
     def _ensure_chroma_directory(self):
         """Ensure ChromaDB persistence directory exists with proper permissions"""
@@ -52,7 +68,17 @@ class ChromaService:
             chroma_path.mkdir(parents=True, exist_ok=True)
 
             # Set proper permissions
-            os.chmod(chroma_path, 0o755)
+            if os.name != 'nt':  # Not Windows
+                os.chmod(chroma_path, 0o755)
+
+            # Test write permissions
+            test_file = chroma_path / ".test_write"
+            try:
+                test_file.touch()
+                test_file.unlink()  # Remove test file
+            except Exception as e:
+                logger.error(f"ChromaDB directory not writable: {e}")
+                raise
 
             logger.info(f"✅ ChromaDB directory ensured: {chroma_path}")
 
@@ -63,7 +89,7 @@ class ChromaService:
     @property
     def is_initialized(self) -> bool:
         """Check if ChromaDB service is initialized"""
-        return self._initialized
+        return self._initialized and self.client is not None and self.collection is not None
 
     async def initialize(self) -> bool:
         """Initialize ChromaDB with persistence"""
@@ -71,11 +97,15 @@ class ChromaService:
             logger.error("❌ ChromaDB not available. Install with: pip install chromadb")
             return False
 
-        if self._initialized:
+        if self._initialized and self.is_initialized:
+            logger.info("ChromaDB already initialized")
             return True
 
         try:
             logger.info("🔍 Initializing ChromaDB service...")
+
+            # Ensure directory exists
+            self._ensure_chroma_directory()
 
             # Create ChromaDB client with persistence
             chroma_settings = ChromaSettings(
@@ -84,48 +114,88 @@ class ChromaService:
                 allow_reset=True
             )
 
-            self.client = chromadb.PersistentClient(
-                path=self.persist_directory,
-                settings=chroma_settings
-            )
+            # Try PersistentClient first
+            try:
+                self.client = chromadb.PersistentClient(
+                    path=self.persist_directory,
+                    settings=chroma_settings
+                )
+                logger.info(f"✅ ChromaDB PersistentClient created: {self.persist_directory}")
+            except Exception as e:
+                logger.warning(f"PersistentClient failed, trying Client: {e}")
+                # Fallback to regular client
+                self.client = chromadb.Client(settings=chroma_settings)
+                logger.info("✅ ChromaDB Client created (fallback)")
 
-            logger.info(f"✅ ChromaDB client created with persistence: {self.persist_directory}")
-
-            # Initialize embedding function
-            self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name=self.embedding_model
-            )
+            # Initialize embedding function with error handling
+            try:
+                self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+                    model_name=self.embedding_model
+                )
+                logger.info(f"✅ Embedding function initialized: {self.embedding_model}")
+            except Exception as e:
+                logger.error(f"Failed to initialize embedding function: {e}")
+                # Try default embedding function
+                try:
+                    self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
+                    logger.info("✅ Default embedding function initialized")
+                except Exception as e2:
+                    logger.error(f"Failed to initialize default embedding function: {e2}")
+                    return False
 
             # Get or create collection
             try:
+                # Try to get existing collection
                 self.collection = self.client.get_collection(
                     name=self.collection_name,
                     embedding_function=self.embedding_function
                 )
                 logger.info(f"✅ Loaded existing collection: {self.collection_name}")
 
-            except Exception:
+            except Exception as e:
+                logger.info(f"Collection doesn't exist, creating new one: {e}")
                 # Collection doesn't exist, create it
-                self.collection = self.client.create_collection(
-                    name=self.collection_name,
-                    embedding_function=self.embedding_function,
-                    metadata={"description": "RAG document chunks with persistence"}
-                )
-                logger.info(f"✅ Created new collection: {self.collection_name}")
+                try:
+                    self.collection = self.client.create_collection(
+                        name=self.collection_name,
+                        embedding_function=self.embedding_function,
+                        metadata={"description": "RAG document chunks with persistence"}
+                    )
+                    logger.info(f"✅ Created new collection: {self.collection_name}")
+                except Exception as e2:
+                    logger.error(f"Failed to create collection: {e2}")
+                    return False
 
             # Verify collection is working
-            collection_count = self.collection.count()
-            logger.info(f"📊 Collection contains {collection_count} documents")
+            try:
+                collection_count = self.collection.count()
+                logger.info(f"📊 Collection contains {collection_count} documents")
+            except Exception as e:
+                logger.warning(f"Could not get collection count: {e}")
+                collection_count = "unknown"
+
+            # Test basic operations
+            try:
+                # Test with a simple query
+                test_results = self.collection.query(
+                    query_texts=["test"],
+                    n_results=1
+                )
+                logger.info("✅ Collection query test successful")
+            except Exception as e:
+                logger.warning(f"Collection query test failed: {e}")
 
             self._initialized = True
+            logger.info("🎉 ChromaDB initialization completed successfully")
             return True
 
         except Exception as e:
             logger.error(f"❌ ChromaDB initialization failed: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             self._initialized = False
             return False
 
-# Rest of the methods remain the same...
     async def add_documents(
             self,
             documents: List[str],
@@ -246,11 +316,19 @@ class ChromaService:
 
             for i, (doc, metadata, distance, doc_id) in enumerate(zip(documents, metadatas, distances, ids)):
                 try:
-                    # Convert distance to similarity score (ChromaDB uses cosine distance)
-                    similarity_score = max(0.0, 1.0 - distance)
+                    # Fix: ChromaDB uses cosine distance (0 to 2), not cosine similarity
+                    # Convert cosine distance to similarity score
+                    similarity_score = max(0.0, 1.0 - (distance / 2.0))
 
-                    # Apply similarity threshold
+                    # Alternative: Use inverse distance for ranking (higher distance = lower score)
+                    # similarity_score = 1.0 / (1.0 + distance)
+
+                    logger.info(f"🔍 Document {i + 1}: similarity={similarity_score:.4f}, distance={distance:.4f}")
+
+                    # Apply similarity threshold (you might want to lower this)
                     if similarity_score < similarity_threshold:
+                        logger.info(
+                            f"🔍 Document {i + 1} filtered out by similarity threshold ({similarity_score:.4f} < {similarity_threshold})")
                         continue
 
                     result = {
@@ -430,6 +508,50 @@ class ChromaService:
             logger.error(f"❌ Error resetting collection: {e}")
             return False
 
+    async def delete_document(self, document_id: int) -> bool:
+        """Delete all chunks for a specific document by document ID"""
+        try:
+            if not self._initialized:
+                await self.initialize()
+
+            if not self.collection:
+                logger.error("ChromaDB collection not initialized")
+                return False
+
+            logger.info(f"🗑️  Deleting document chunks for document ID: {document_id}")
+
+            # Get count before deletion for verification
+            count_before = self.collection.count()
+
+            # Delete documents where document_id or pdf_id matches
+            self.collection.delete(
+                where={
+                    "$or": [
+                        {"document_id": document_id},
+                        {"pdf_id": document_id}
+                    ]
+                }
+            )
+
+            # Verify deletion
+            count_after = self.collection.count()
+            deleted_count = count_before - count_after
+
+            logger.info(f"✅ Deleted {deleted_count} chunks for document ID: {document_id}")
+
+            # Force persistence
+            try:
+                if hasattr(self.client, 'persist'):
+                    self.client.persist()
+            except Exception as e:
+                logger.warning(f"Could not force persistence after deletion: {e}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error deleting document {document_id}: {e}")
+            return False
+
     async def health_check(self) -> Dict[str, Any]:
         """Comprehensive health check for ChromaDB"""
         health_info = {
@@ -455,7 +577,11 @@ class ChromaService:
             # Check initialization
             if not self._initialized:
                 try:
-                    await self.initialize()
+                    initialization_success = await self.initialize()
+                    if not initialization_success:
+                        health_info["status"] = "initialization_failed"
+                        health_info["errors"].append("Failed to initialize ChromaDB")
+                        return health_info
                 except Exception as e:
                     health_info["errors"].append(f"Initialization failed: {e}")
                     health_info["status"] = "unhealthy"
@@ -502,8 +628,7 @@ class ChromaService:
             health_info["persistence_working"] = health_info["storage_info"].get("directory_exists", False)
 
             # Determine overall status
-            if health_info["collection_exists"] and health_info["can_search"] and health_info[
-                "persistence_working"]:
+            if health_info["collection_exists"] and health_info["can_search"] and health_info["persistence_working"]:
                 health_info["status"] = "healthy"
             elif health_info["collection_exists"]:
                 health_info["status"] = "degraded"
@@ -533,14 +658,192 @@ class ChromaService:
         except Exception as e:
             logger.error(f"Error closing ChromaDB service: {e}")
 
-# Global ChromaDB service instance - Only create if ChromaDB is available
-if CHROMADB_AVAILABLE:
+chroma_service = None
+
+def get_chroma_service():
+    """Get or create ChromaDB service instance"""
+    global chroma_service
+
+    if chroma_service is None:
+        if CHROMADB_AVAILABLE:
+            try:
+                chroma_service = ChromaService()
+                logger.info("🎉 Global ChromaDB service instance created successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to create global ChromaDB service: {e}")
+                chroma_service = None
+        else:
+            logger.warning("⚠️  ChromaDB not available, service not created")
+            chroma_service = None
+
+    return chroma_service
+
+
+async def debug_collection_contents(self) -> Dict[str, Any]:
+    """Debug method to inspect what's actually in ChromaDB"""
     try:
-        chroma_service = ChromaService()
-        logger.info("🎉 Global ChromaDB service instance created successfully")
+        if not self._initialized:
+            await self.initialize()
+
+        if not self.collection:
+            return {"error": "Collection not initialized"}
+
+        # Get all documents with metadata
+        all_results = self.collection.get(
+            include=["documents", "metadatas", "embeddings"]
+        )
+
+        debug_info = {
+            "total_count": self.collection.count(),
+            "collection_name": self.collection_name,
+            "persist_directory": self.persist_directory,
+            "documents_sample": [],
+            "metadata_sample": [],
+            "document_ids": all_results.get("ids", []),
+        }
+
+        # Get sample of first 5 documents
+        if all_results.get("documents"):
+            documents = all_results["documents"][:5]
+            metadatas = all_results.get("metadatas", [])[:5]
+
+            for i, (doc, meta) in enumerate(zip(documents, metadatas)):
+                debug_info["documents_sample"].append({
+                    "index": i,
+                    "content_preview": doc[:200] + "..." if len(doc) > 200 else doc,
+                    "content_length": len(doc),
+                    "metadata": meta
+                })
+
+        # Get unique PDF IDs and filenames
+        if all_results.get("metadatas"):
+            pdf_ids = set()
+            filenames = set()
+            categories = set()
+
+            for meta in all_results["metadatas"]:
+                if meta.get("pdf_id"):
+                    pdf_ids.add(meta["pdf_id"])
+                if meta.get("filename"):
+                    filenames.add(meta["filename"])
+                if meta.get("category"):
+                    categories.add(meta["category"])
+
+            debug_info["unique_pdf_ids"] = list(pdf_ids)
+            debug_info["unique_filenames"] = list(filenames)
+            debug_info["unique_categories"] = list(categories)
+
+        return debug_info
+
     except Exception as e:
-        logger.error(f"❌ Failed to create global ChromaDB service: {e}")
-        chroma_service = None
-else:
-    logger.warning("⚠️  ChromaDB not available, service not created")
-    chroma_service = None
+        logger.error(f"Error debugging collection: {e}")
+        return {"error": str(e)}
+
+
+async def search_by_content_keywords(self, keywords: List[str], limit: int = 10) -> List[Dict]:
+    """Search for documents containing specific keywords in content"""
+    try:
+        if not self._initialized:
+            await self.initialize()
+
+        if not self.collection:
+            return []
+
+        results = []
+
+        # Get all documents
+        all_results = self.collection.get(
+            include=["documents", "metadatas"]
+        )
+
+        documents = all_results.get("documents", [])
+        metadatas = all_results.get("metadatas", [])
+        ids = all_results.get("ids", [])
+
+        # Search for keywords in document content
+        for i, (doc, meta, doc_id) in enumerate(zip(documents, metadatas, ids)):
+            content_lower = doc.lower()
+            matches = []
+
+            for keyword in keywords:
+                if keyword.lower() in content_lower:
+                    matches.append(keyword)
+
+            if matches:
+                results.append({
+                    "id": doc_id,
+                    "content_preview": doc[:300] + "..." if len(doc) > 300 else doc,
+                    "matching_keywords": matches,
+                    "metadata": meta,
+                    "content_length": len(doc)
+                })
+
+        return results[:limit]
+
+    except Exception as e:
+        logger.error(f"Error searching by keywords: {e}")
+        return []
+
+
+async def test_embedding_search(self, query: str) -> Dict[str, Any]:
+    """Test embedding search with detailed debugging"""
+    try:
+        if not self._initialized:
+            await self.initialize()
+
+        if not self.collection:
+            return {"error": "Collection not initialized"}
+
+        logger.info(f"🔍 Testing embedding search for: '{query}'")
+
+        # Try different similarity thresholds
+        results_debug = {}
+
+        for threshold in [0.0, 0.3, 0.5, 0.7, 0.9]:
+            try:
+                results = self.collection.query(
+                    query_texts=[query],
+                    n_results=10,
+                    include=["documents", "metadatas", "distances"]
+                )
+
+                if results and results.get("documents") and results["documents"][0]:
+                    documents = results["documents"][0]
+                    distances = results.get("distances", [[]])[0]
+                    metadatas = results.get("metadatas", [[]])[0]
+
+                    # Filter by threshold
+                    filtered_results = []
+                    for doc, distance, meta in zip(documents, distances, metadatas):
+                        similarity = max(0.0, 1.0 - distance)
+                        if similarity >= threshold:
+                            filtered_results.append({
+                                "similarity": round(similarity, 4),
+                                "distance": round(distance, 4),
+                                "content_preview": doc[:150] + "..." if len(doc) > 150 else doc,
+                                "metadata": meta
+                            })
+
+                    results_debug[f"threshold_{threshold}"] = {
+                        "count": len(filtered_results),
+                        "results": filtered_results[:3]  # Top 3 results
+                    }
+                else:
+                    results_debug[f"threshold_{threshold}"] = {"count": 0, "results": []}
+
+            except Exception as e:
+                results_debug[f"threshold_{threshold}"] = {"error": str(e)}
+
+        return {
+            "query": query,
+            "collection_count": self.collection.count(),
+            "embedding_model": self.embedding_model,
+            "results_by_threshold": results_debug
+        }
+
+    except Exception as e:
+        logger.error(f"Error testing embedding search: {e}")
+        return {"error": str(e)}
+
+# Initialize the service
+chroma_service = get_chroma_service()

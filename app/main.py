@@ -1,6 +1,9 @@
 import logging
 import asyncio
 from contextlib import asynccontextmanager
+from typing import List
+
+from chromadb.app import app
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -14,7 +17,7 @@ from app.config import settings
 from app.core.database import init_db
 from app.services.ollama_service import OllamaService
 from app.services.vector_store import VectorStore
-from app.services.chroma_service import ChromaService
+from app.services.chroma_service import ChromaService, get_chroma_service
 from app.services.document_processor import DocumentProcessor
 
 # Import your existing routes
@@ -34,14 +37,65 @@ ollama_service = None
 vector_store = None
 chroma_service = None
 document_processor = None
+rag_service = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    try:
+        logger.info("🚀 Starting application...")
+
+        # Initialize ChromaDB
+        from app.services.chroma_service import get_chroma_service
+        chroma_service = get_chroma_service()
+
+        if chroma_service:
+            logger.info("🔍 Initializing ChromaDB...")
+            success = await chroma_service.initialize()
+            if success:
+                logger.info("✅ ChromaDB initialized successfully")
+
+                # Perform health check
+                health = await chroma_service.health_check()
+                logger.info(f"📊 ChromaDB health status: {health['status']}")
+
+                if health['status'] not in ['healthy', 'degraded']:
+                    logger.warning(f"⚠️ ChromaDB health issues: {health.get('errors', [])}")
+            else:
+                logger.error("❌ ChromaDB initialization failed")
+        else:
+            logger.error("❌ ChromaDB service not available")
+
+    except Exception as e:
+        logger.error(f"❌ Startup initialization failed: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    try:
+        logger.info("🛑 Shutting down application...")
+
+        from app.services.chroma_service import chroma_service
+        if chroma_service:
+            await chroma_service.close()
+            logger.info("✅ ChromaDB service closed")
+
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown"""
-    global document_processor, vector_store, ollama_service, chroma_service
+    global document_processor, vector_store, ollama_service, chroma_service, rag_service
 
     # Startup
+    logger.info("🚀 Starting RAG application...")
+
     try:
         from app.core.database import init_db, check_database_health
 
@@ -62,18 +116,17 @@ async def lifespan(app: FastAPI):
             logger.error("Database initialization failed")
             raise Exception("Database initialization failed")
 
-        # Initialize ChromaDB service (unified approach)
+        # Initialize ChromaDB service
         logger.info("Initializing ChromaDB service...")
         chroma_service = ChromaService()
         chroma_init_success = await chroma_service.initialize()
 
         if chroma_init_success:
-            logger.info("ChromaDB service initialized successfully")
-            # Get collection stats
+            logger.info("✅ ChromaDB service initialized successfully")
             stats = chroma_service.get_collection_stats()
             logger.info(f"ChromaDB stats: {stats}")
         else:
-            logger.error("ChromaDB service initialization failed")
+            logger.error("❌ ChromaDB service initialization failed")
             raise Exception("ChromaDB service initialization failed")
 
         # Initialize legacy VectorStore (if still needed for backward compatibility)
@@ -81,53 +134,117 @@ async def lifespan(app: FastAPI):
         vector_store = VectorStore()
         try:
             await vector_store.initialize()
-            logger.info("Legacy VectorStore initialized successfully")
+            logger.info("✅ Legacy VectorStore initialized successfully")
         except Exception as e:
             logger.warning(f"Legacy VectorStore initialization failed: {e}")
-            # Don't fail startup if legacy vector store fails
 
-        # Initialize Ollama service
+        # Initialize Ollama service with retry logic
         logger.info("Initializing Ollama service...")
-        ollama_service = OllamaService()
-        ollama_success = await ollama_service.initialize()
+        from app.services.ollama_service import OllamaService
 
-        if ollama_success:
-            logger.info("Ollama service initialized successfully")
-            models = await ollama_service.get_available_models()
-            logger.info(f"Available Ollama models: {models}")
-        else:
-            logger.warning("Ollama service not available - RAG will work with search only")
+        # Create new instance with explicit parameters
+        ollama_service = OllamaService(base_url="http://localhost:11434", timeout=30)
+
+        ollama_success = False
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            logger.info(f"Attempting to connect to Ollama (attempt {attempt + 1}/{max_retries})")
+            ollama_success = await ollama_service.initialize()
+
+            if ollama_success:
+                logger.info("✅ Ollama service initialized successfully")
+                try:
+                    models = await ollama_service.list_models()
+                    if models:
+                        model_names = [m.get('name', 'unknown') for m in models[:3]]
+                        logger.info(f"📋 Available Ollama models: {', '.join(model_names)}")
+                    else:
+                        logger.warning("⚠️  No models found - you may need to pull a model first")
+                except Exception as e:
+                    logger.warning(f"Could not list models: {e}")
+                break
+            elif attempt < max_retries - 1:
+                logger.info("⏳ Retrying Ollama connection in 5 seconds...")
+                await asyncio.sleep(5)
+
+        if not ollama_success:
+            logger.warning("⚠️  Ollama service not available - RAG will work with search only")
 
         # Initialize document processor
         logger.info("Initializing document processor...")
         document_processor = DocumentProcessor()
 
         # Log supported file types
-        logger.info(f"Supported file types: {list(document_processor.supported_types.keys())}")
+        logger.info(f"📄 Supported file types: {list(document_processor.supported_types.keys())}")
+
+        # Initialize RAG service
+        logger.info("Initializing RAG service...")
+        try:
+            from app.services.rag_service import RAGService
+            rag_service = RAGService(
+                chroma_service=chroma_service,
+                ollama_service=ollama_service if ollama_success else None
+            )
+            logger.info("✅ RAG service initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ RAG service initialization failed: {e}")
+            # Create a minimal RAG service that works without Ollama
+            rag_service = RAGService(
+                chroma_service=chroma_service,
+                ollama_service=None
+            )
+            logger.info("✅ RAG service initialized in search-only mode")
 
         # Make services available globally and in app state
         app.state.vector_store = vector_store
         app.state.chroma_service = chroma_service
         app.state.ollama_service = ollama_service
         app.state.document_processor = document_processor
+        app.state.rag_service = rag_service
 
-        logger.info("All services initialized successfully")
+        # Log final status
+        services_status = {
+            "database": "✅ Connected",
+            "chroma_db": "✅ Connected" if chroma_init_success else "❌ Failed",
+            "ollama": "✅ Connected" if ollama_success else "⚠️  Search-only mode",
+            "vector_store": "✅ Initialized",
+            "document_processor": "✅ Initialized",
+            "rag_service": "✅ Initialized"
+        }
+
+        logger.info("🎯 Service Status Summary:")
+        for service, status in services_status.items():
+            logger.info(f"  {service}: {status}")
+
+        logger.info("✅ All services initialized successfully")
 
     except Exception as e:
-        logger.error(f"Startup error: {e}")
+        logger.error(f"❌ Startup error: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise
 
     yield
 
     # Shutdown
-    logger.info("Shutting down services...")
+    logger.info("🛑 Shutting down services...")
+
+    # Cleanup RAG service
+    if 'rag_service' in locals() and rag_service:
+        try:
+            if hasattr(rag_service, 'close'):
+                await rag_service.close()
+            logger.info("✅ RAG service closed")
+        except Exception as e:
+            logger.error(f"Error closing RAG service: {e}")
 
     # Cleanup ChromaDB connections
     if chroma_service:
         try:
             if hasattr(chroma_service, 'close'):
                 await chroma_service.close()
-            logger.info("ChromaDB service closed")
+            logger.info("✅ ChromaDB service closed")
         except Exception as e:
             logger.error(f"Error closing ChromaDB service: {e}")
 
@@ -136,7 +253,7 @@ async def lifespan(app: FastAPI):
         try:
             if hasattr(vector_store, 'close'):
                 await vector_store.close()
-            logger.info("Legacy VectorStore closed")
+            logger.info("✅ Legacy VectorStore closed")
         except Exception as e:
             logger.error(f"Error closing vector store: {e}")
 
@@ -145,11 +262,11 @@ async def lifespan(app: FastAPI):
         try:
             if hasattr(ollama_service, 'close'):
                 await ollama_service.close()
-            logger.info("Ollama service closed")
+            logger.info("✅ Ollama service closed")
         except Exception as e:
             logger.error(f"Error closing Ollama service: {e}")
 
-    logger.info("Application shutdown completed")
+    logger.info("✅ Application shutdown completed")
 
 
 app = FastAPI(
@@ -227,6 +344,8 @@ async def log_requests(request, call_next):
     return response
 
 
+
+
 # Include API routes from separate files
 app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(pdf.router, prefix="/pdf", tags=["PDFs"])
@@ -258,6 +377,35 @@ async def root():
         }
     }
 
+
+@app.get("/debug/chroma-contents")
+async def debug_chroma_contents():
+    """Debug endpoint to see what's in ChromaDB"""
+    chroma_service = get_chroma_service()
+    if not chroma_service:
+        raise HTTPException(status_code=500, detail="ChromaDB service not available")
+
+    return await chroma_service.debug_collection_contents()
+
+
+@app.post("/debug/chroma-search")
+async def debug_chroma_search(query: str = "dennis"):
+    """Debug endpoint to test ChromaDB search"""
+    chroma_service = get_chroma_service()
+    if not chroma_service:
+        raise HTTPException(status_code=500, detail="ChromaDB service not available")
+
+    return await chroma_service.test_embedding_search(query)
+
+
+@app.post("/debug/chroma-keywords")
+async def debug_chroma_keywords(keywords: List[str] = ["dennis", "document", "pdf"]):
+    """Debug endpoint to search by keywords"""
+    chroma_service = get_chroma_service()
+    if not chroma_service:
+        raise HTTPException(status_code=500, detail="ChromaDB service not available")
+
+    return await chroma_service.search_by_content_keywords(keywords)
 
 # Add database reset endpoint for development
 @app.post("/admin/reset-database")

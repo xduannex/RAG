@@ -339,7 +339,7 @@ router.post('/search', async (req, res) => {
 });
 
 // RAG query endpoint
-router.post('/rag', async (req, res) => {
+router.post('/search/rag', async (req, res) => {
     try {
         const {
             question,  // Accept 'question' from frontend
@@ -362,17 +362,23 @@ router.post('/rag', async (req, res) => {
 
         console.log('RAG query:', searchQuery, 'Model:', model);
 
+        // FIXED: Match exact parameters from working curl request
         const ragPayload = {
-            query: searchQuery,  // Send as 'query' to match backend
-            model,
-            max_results: limit,  // Changed from 'limit' to 'max_results'
-            similarity_threshold,
-            include_sources,
-            stream
+            query: searchQuery,                    // ✅ Same as curl
+            max_results: limit,                    // ✅ Changed from 'limit' to 'max_results'
+            similarity_threshold,                  // ✅ Same as curl
+            model,                                // ✅ Same as curl
+            include_context: include_sources       // ✅ Changed from 'include_sources' to 'include_context'
         };
 
-        if (pdf_ids && pdf_ids.length > 0) ragPayload.document_ids = pdf_ids;  // Changed to 'document_ids'
-        if (categories && categories.length > 0) ragPayload.category = categories[0];  // Backend expects single category
+        // Only add optional parameters if they exist
+        if (pdf_ids && pdf_ids.length > 0) ragPayload.document_ids = pdf_ids;
+        if (categories && categories.length > 0) ragPayload.category = categories[0];
+
+        // Remove stream parameter as it's not in the working curl request
+        // if (stream !== undefined) ragPayload.stream = stream;
+
+        console.log('Sending RAG payload:', ragPayload); // Debug log
 
         const response = await apiClient.post('/search/rag', ragPayload, {
             timeout: 120000 // 2 minutes for RAG queries
@@ -389,7 +395,6 @@ router.post('/rag', async (req, res) => {
         });
     }
 });
-
 // Search suggestions
 router.get('/search/suggestions', async (req, res) => {
     try {
