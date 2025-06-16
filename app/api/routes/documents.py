@@ -420,6 +420,99 @@ async def get_documents_stats(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 
+@router.get("/{document_id}/view")
+async def view_document(document_id: int, db: Session = Depends(get_db)):
+    """Get document content for viewing"""
+
+    try:
+        document = db.query(Document).filter(Document.id == document_id).first()
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if not os.path.exists(document.file_path):
+            raise HTTPException(status_code=404, detail="Document file not found")
+
+        # Get document content based on file type
+        content = ""
+        file_type = document.file_type.lower()
+
+        try:
+            if file_type == "txt":
+                with open(document.file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+            elif file_type == "pdf":
+                # Extract text from PDF
+                import PyPDF2
+                with open(document.file_path, 'rb') as f:
+                    pdf_reader = PyPDF2.PdfReader(f)
+                    content = ""
+                    for page_num, page in enumerate(pdf_reader.pages):
+                        page_text = page.extract_text()
+                        content += f"\n--- Page {page_num + 1} ---\n{page_text}\n"
+
+            elif file_type in ["doc", "docx"]:
+                # Extract text from Word documents
+                from docx import Document as DocxDocument
+                doc = DocxDocument(document.file_path)
+                paragraphs = []
+                for para in doc.paragraphs:
+                    if para.text.strip():
+                        paragraphs.append(para.text)
+                content = "\n\n".join(paragraphs)
+
+            else:
+                raise HTTPException(status_code=400, detail=f"File type {file_type} not supported for viewing")
+
+        except Exception as e:
+            logger.error(f"Error extracting content from document {document_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to extract document content: {str(e)}")
+
+        return {
+            "document_id": document.id,
+            "filename": document.original_filename,
+            "title": document.title,
+            "file_type": document.file_type,
+            "content": content,
+            "word_count": document.word_count,
+            "total_pages": document.total_pages,
+            "created_at": document.created_at.isoformat() if document.created_at else None
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error viewing document {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to view document: {str(e)}")
+
+
+@router.get("/{document_id}/download")
+async def download_document(document_id: int, db: Session = Depends(get_db)):
+    """Download original document file"""
+    from fastapi.responses import FileResponse
+
+    try:
+        document = db.query(Document).filter(Document.id == document_id).first()
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if not os.path.exists(document.file_path):
+            raise HTTPException(status_code=404, detail="Document file not found")
+
+        return FileResponse(
+            path=document.file_path,
+            filename=document.original_filename,
+            media_type='application/octet-stream'
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading document {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to download document: {str(e)}")
+
 # Fixed background processing function
 async def process_document_background(document_id: int):
     """Background task to process a document"""

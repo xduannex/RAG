@@ -506,7 +506,18 @@ async def get_supported_types():
         "max_file_size": settings.max_file_size,
         "ocr_enabled": settings.enable_ocr
     }
-
+@app.get("/debug/routes")
+async def list_routes():
+    """List all available routes for debugging"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'methods') and hasattr(route, 'path'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods),
+                "name": getattr(route, 'name', 'unnamed')
+            })
+    return {"routes": routes}
 
 # CORS test endpoint
 @app.get("/cors-test")

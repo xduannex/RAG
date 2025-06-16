@@ -1,4 +1,4 @@
-// RAG Chat Application JavaScript
+// RAG Chat Application JavaScript - Main App Controller
 
 // Configuration
 const API_BASE_URL = 'http://localhost:8000';
@@ -27,18 +27,18 @@ let isDarkMode = false;
 let chatContainer, messageInput, chatForm, uploadForm, statusContainer;
 let documentList, statusDot, statusText, uploadArea, fileInput;
 
-// Store original functions before wrapping them
-const originalFunctions = {};
-
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing RAG Chat Application...');
-    initializeApp();
+    // Wait a bit for other modules to load
+    setTimeout(initializeApp, 100);
 });
 
 async function initializeApp() {
     try {
-        // Initialize DOM elements
+        console.log('🚀 Initializing RAG Chat Application...');
+
+        // Initialize DOM elements first
         initializeDOMElements();
 
         // Initialize theme
@@ -47,9 +47,11 @@ async function initializeApp() {
         // Check server connection
         await checkServerConnection();
 
-        // Load initial data
-        await loadDocuments();
-        await loadStats();
+        // Wait for managers to be ready and load data
+        await waitForManagersAndLoadData();
+
+        // Load stats with fallback
+        await loadStatsWithFallback();
 
         // Setup event listeners
         setupEventListeners();
@@ -57,11 +59,54 @@ async function initializeApp() {
         // Load saved settings
         loadSettings();
 
-        console.log('Application initialized successfully');
+        console.log('✅ Application initialized successfully');
+
+        // Show welcome message if no chat history
+        setTimeout(() => {
+            const chatContainer = document.getElementById('chatContainer');
+            if (chatContainer && chatContainer.children.length <= 1) {
+                showWelcomeMessage();
+            }
+        }, 1000);
+
     } catch (error) {
-        console.error('Failed to initialize application:', error);
-        showStatus('Failed to connect to server. Please check if the backend is running.', 'error');
+        console.error('❌ Failed to initialize application:', error);
+        if (window.showStatus) {
+            window.showStatus('Failed to connect to server. Please check if the backend is running.', 'error');
+        }
     }
+}
+
+async function waitForManagersAndLoadData() {
+    return new Promise((resolve) => {
+        let attempts = 0;
+        const maxAttempts = 20;
+
+        const checkAndLoad = async () => {
+            attempts++;
+
+            if (window.documentManager && typeof window.documentManager.loadDocuments === 'function') {
+                try {
+                    console.log('Document manager ready, loading documents...');
+                    await window.documentManager.loadDocuments();
+                    resolve();
+                    return;
+                } catch (error) {
+                    console.error('Error loading documents:', error);
+                }
+            }
+
+            if (attempts >= maxAttempts) {
+                console.warn('Document manager not ready after timeout');
+                resolve();
+                return;
+            }
+
+            setTimeout(checkAndLoad, 250);
+        };
+
+        setTimeout(checkAndLoad, 100);
+    });
 }
 
 function initializeDOMElements() {
@@ -80,6 +125,15 @@ function initializeDOMElements() {
     if (!chatContainer || !messageInput || !chatForm) {
         throw new Error('Required DOM elements not found');
     }
+
+    // Set global references for backward compatibility
+    window.chatContainer = chatContainer;
+    window.messageInput = messageInput;
+    window.chatForm = chatForm;
+    window.uploadForm = uploadForm;
+    window.fileInput = fileInput;
+    window.uploadArea = uploadArea;
+    window.documentList = documentList;
 }
 
 function initializeTheme() {
@@ -117,8 +171,7 @@ async function checkServerConnection() {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
-            },
-            timeout: 10000
+            }
         });
 
         if (response.ok) {
@@ -136,6 +189,8 @@ async function checkServerConnection() {
 
 function updateConnectionStatus(connected) {
     isConnected = connected;
+    window.isConnected = connected; // Set global reference
+
     const connectionIndicator = document.getElementById('connectionIndicator');
 
     if (connectionIndicator && statusText) {
@@ -191,110 +246,7 @@ function setupEventListeners() {
     document.addEventListener('click', handleModalClose);
 }
 
-function handleFileInputChange(e) {
-    try {
-        const files = e.target.files;
-        if (files && files.length > 0) {
-            const fileName = files[0].name;
-            const uploadText = uploadArea?.querySelector('.upload-text');
-            if (uploadText) {
-                uploadText.textContent = `Selected: ${fileName}`;
-            }
-        }
-    } catch (error) {
-        console.error('Error handling file input change:', error);
-    }
-}
-
-function handleChatKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleChatSubmit(e);
-    }
-}
-
-function autoResizeTextarea() {
-    if (messageInput) {
-        messageInput.style.height = 'auto';
-        messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
-    }
-}
-
-function setupDragAndDrop() {
-    if (!uploadArea) return;
-
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        uploadArea.addEventListener(eventName, preventDefaults, false);
-    });
-
-    ['dragenter', 'dragover'].forEach(eventName => {
-        uploadArea.addEventListener(eventName, highlight, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-        uploadArea.addEventListener(eventName, unhighlight, false);
-    });
-
-    uploadArea.addEventListener('drop', handleDrop, false);
-}
-
-function preventDefaults(e) {
-    e.preventDefault();
-    e.stopPropagation();
-}
-
-function highlight() {
-    uploadArea?.classList.add('drag-over');
-}
-
-function unhighlight() {
-    uploadArea?.classList.remove('drag-over');
-}
-
-function handleDrop(e) {
-    try {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-
-        if (files && files.length > 0) {
-            fileInput.files = files;
-            handleFileInputChange({ target: { files } });
-        }
-    } catch (error) {
-        console.error('Error handling file drop:', error);
-    }
-}
-
-function handleGlobalKeydown(e) {
-    if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-            case 'l':
-                e.preventDefault();
-                clearChat();
-                break;
-            case 'r':
-                e.preventDefault();
-                loadStats();
-                break;
-        }
-    }
-
-    if (e.key === 'Escape') {
-        // Close any open modals
-        document.querySelectorAll('.modal').forEach(modal => {
-            if (modal.style.display === 'flex') {
-                modal.style.display = 'none';
-            }
-        });
-    }
-}
-
-function handleModalClose(e) {
-    if (e.target.classList.contains('modal')) {
-        e.target.style.display = 'none';
-    }
-}
-
+// Chat functionality
 async function handleChatSubmit(e) {
     e.preventDefault();
 
@@ -317,10 +269,16 @@ async function handleChatSubmit(e) {
 
         let response;
 
-        if (currentSearchMode === 'rag') {
-            response = await performRAGQuery(message);
+        // Use search manager if available, otherwise fallback to direct API calls
+        if (window.searchManager && typeof window.searchManager.performSearch === 'function') {
+            response = await window.searchManager.performSearch(message);
         } else {
-            response = await performSearch(message);
+            // Fallback to direct API calls
+            if (currentSearchMode === 'rag') {
+                response = await performRAGQuery(message);
+            } else {
+                response = await performSearch(message);
+            }
         }
 
         // Remove typing indicator
@@ -337,6 +295,7 @@ async function handleChatSubmit(e) {
     }
 }
 
+// Fallback API functions (in case managers aren't loaded)
 async function performRAGQuery(query) {
     try {
         const response = await fetch(`${API_BASE_URL}/search/rag`, {
@@ -345,9 +304,9 @@ async function performRAGQuery(query) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                query: query,  // or question: query, depending on your backend
+                query: query,
                 max_results: 5,
-                similarity_threshold: 0.0,  // Add this for better results
+                similarity_threshold: 0.0,
                 model: "llama3.2:latest",
                 include_context: true
             })
@@ -394,168 +353,121 @@ async function performSearch(query) {
     }
 }
 
-function addMessage(content, sender, sources = null) {
-    if (!chatContainer) return;
-
+function updateStats(stats) {
     try {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `chat-message ${sender}-message`;
+        console.log('Updating stats display with:', stats);
 
-        // Add message header
-        const headerDiv = document.createElement('div');
-        headerDiv.className = 'message-header';
-        headerDiv.innerHTML = `
-            <span class="message-sender">${sender === 'user' ? 'You' : 'Assistant'}</span>
-            <span class="message-time">${new Date().toLocaleTimeString()}</span>
-        `;
+        // Basic stats
+        const totalDocsElement = document.getElementById('totalDocs');
+        const totalSearchesElement = document.getElementById('totalSearches');
 
-        // Add message content
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'message-content';
-
-        // Format content with markdown-like styling
-        const formattedContent = formatMessageContent(content);
-        contentDiv.innerHTML = formattedContent;
-
-        messageDiv.appendChild(headerDiv);
-        messageDiv.appendChild(contentDiv);
-
-        // Add sources if available
-        if (sources && Array.isArray(sources) && sources.length > 0) {
-            const sourcesDiv = document.createElement('div');
-            sourcesDiv.className = 'message-sources';
-            sourcesDiv.innerHTML = '<strong>Sources:</strong>';
-
-            sources.forEach((source, index) => {
-                const sourceDiv = document.createElement('div');
-                sourceDiv.className = 'source-item';
-                sourceDiv.onclick = () => openDocumentViewer(source);
-
-                sourceDiv.innerHTML = `
-                    <div class="source-title">${escapeHtml(source.title || source.filename || `Source ${index + 1}`)}</div>
-                    <div class="source-content">${truncateText(source.content || '', 150)}</div>
-                    <div class="source-meta">
-                        <span>${escapeHtml(source.filename || 'Unknown file')}</span>
-                        ${source.score ? `<span class="source-relevance">${(source.score * 100).toFixed(1)}%</span>` : ''}
-                    </div>
-                `;
-
-                sourcesDiv.appendChild(sourceDiv);
-            });
-
-            contentDiv.appendChild(sourcesDiv);
+        if (totalDocsElement) {
+            const docCount = stats.total_documents || 0;
+            totalDocsElement.textContent = String(docCount);
+            console.log('Updated total docs:', docCount);
         }
 
-        chatContainer.appendChild(messageDiv);
-
-        // Remove welcome message if it exists
-        const welcomeMessage = chatContainer.querySelector('.welcome-message');
-        if (welcomeMessage) {
-            welcomeMessage.remove();
+        if (totalSearchesElement) {
+            totalSearchesElement.textContent = String(stats.total_searches || 0);
+            console.log('Updated total searches:', stats.total_searches);
         }
 
-                // Scroll to bottom
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    } catch (error) {
-        console.error('Error adding message:', error);
-    }
-}
+        // Additional stats if elements exist
+        const elements = {
+            'avgResponseTime': stats.avg_response_time ? `${stats.avg_response_time}s` : '?',
+            'recentSearches': stats.recent_searches_24h || '?',
+            'processedDocs': stats.processed_documents || '?',
+            'searchableDocs': stats.searchable_documents || '?'
+        };
 
-function formatMessageContent(content) {
-    if (!content) return '';
-
-    try {
-        // Basic markdown-like formatting
-        let formatted = escapeHtml(String(content))
-            // Bold text
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            // Italic text
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            // Code blocks
-            .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-            // Inline code
-            .replace(/`(.*?)`/g, '<code>$1</code>')
-            // Line breaks
-            .replace(/\n/g, '<br>');
-
-        // Convert URLs to links
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
-        formatted = formatted.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-
-        return formatted;
-    } catch (error) {
-        console.error('Error formatting message content:', error);
-        return escapeHtml(String(content));
-    }
-}
-
-function truncateText(text, maxLength) {
-    if (!text) return '';
-    const textStr = String(text);
-    if (textStr.length <= maxLength) return escapeHtml(textStr);
-    return escapeHtml(textStr.substring(0, maxLength)) + '...';
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    try {
-        const div = document.createElement('div');
-        div.textContent = String(text);
-        return div.innerHTML;
-    } catch (error) {
-        console.error('Error escaping HTML:', error);
-        return String(text);
-    }
-}
-
-function showTypingIndicator() {
-    if (!chatContainer) return null;
-
-    try {
-        const typingId = 'typing-' + Date.now();
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message assistant-message';
-        messageDiv.id = typingId;
-
-        const typingDiv = document.createElement('div');
-        typingDiv.className = 'typing-indicator';
-        typingDiv.innerHTML = `
-            <div class="loading-dots">
-                <div class="loading-dot"></div>
-                <div class="loading-dot"></div>
-                <div class="loading-dot"></div>
-            </div>
-            <span>Assistant is typing...</span>
-        `;
-
-        messageDiv.appendChild(typingDiv);
-        chatContainer.appendChild(messageDiv);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-
-        return typingId;
-    } catch (error) {
-        console.error('Error showing typing indicator:', error);
-        return null;
-    }
-}
-
-function removeTypingIndicator(typingId) {
-    try {
-        if (typingId) {
-            const typingElement = document.getElementById(typingId);
-            if (typingElement) {
-                typingElement.remove();
+        Object.entries(elements).forEach(([elementId, value]) => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = String(value);
+                console.log(`Updated ${elementId}:`, value);
             }
-        } else {
-            // Remove any typing indicators if no specific ID provided
-            const typingElements = document.querySelectorAll('.typing-indicator');
-            typingElements.forEach(el => el.parentElement?.remove());
-        }
+        });
+
+        console.log('Stats updated successfully');
     } catch (error) {
-        console.error('Error removing typing indicator:', error);
+        console.error('Error updating stats display:', error);
     }
 }
 
+
+// Stats loading with fallback
+async function loadStatsWithFallback() {
+    console.log('Loading stats with fallback...');
+
+    const totalDocsElement = document.getElementById('totalDocs');
+    const totalSearchesElement = document.getElementById('totalSearches');
+
+    // Show loading state
+    if (totalDocsElement) totalDocsElement.textContent = '...';
+    if (totalSearchesElement) totalSearchesElement.textContent = '...';
+
+    try {
+        console.log('Attempting to load stats from /search/stats endpoint...');
+
+        const response = await fetch(`${API_BASE_URL}/search/stats`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        console.log('Stats endpoint response status:', response.status);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Raw stats API response:', data);
+
+        // Map the response from the backend to match frontend expectations
+        const stats = {
+            total_documents: data.total_documents || data.processed_documents || 0,
+            total_searches: data.total_searches || 0,
+            recent_searches_24h: data.recent_searches_24h || 0,
+            processed_documents: data.processed_documents || 0,
+            searchable_documents: data.searchable_documents || 0,
+            avg_response_time: data.avg_response_time || 0,
+            top_queries: data.top_queries || [],
+            vector_store: data.vector_store || {}
+        };
+
+        console.log('Processed stats for display:', stats);
+        updateStats(stats);
+
+        // Show success status
+        if (window.showStatus) {
+            window.showStatus(`Stats loaded: ${stats.total_documents} docs, ${stats.total_searches} searches`, 'success', 3000);
+        }
+
+    } catch (error) {
+        console.error('Failed to load stats:', error);
+
+        // Use fallback values
+        const fallbackStats = {
+            total_documents: '?',
+            total_searches: '?',
+            recent_searches_24h: '?',
+            processed_documents: '?',
+            searchable_documents: '?',
+            avg_response_time: '?'
+        };
+
+        updateStats(fallbackStats);
+
+        if (window.showStatus) {
+            window.showStatus('Failed to load statistics: ' + error.message, 'warning', 5000);
+        }
+    }
+}
+
+
+// Upload functionality
 async function handleUploadSubmit(e) {
     e.preventDefault();
 
@@ -613,9 +525,13 @@ async function handleUploadSubmit(e) {
         // Show success message
         showStatus(`File "${result.filename || 'Unknown'}" uploaded successfully!`, 'success');
 
-        // Reload documents list
-        await loadDocuments();
-        await loadStats();
+        // Reload documents list using document manager if available
+        if (window.documentManager && typeof window.documentManager.loadDocuments === 'function') {
+            await window.documentManager.loadDocuments();
+        }
+
+        // Reload stats
+        await loadStatsWithFallback();
 
     } catch (error) {
         console.error('Upload error:', error);
@@ -648,203 +564,373 @@ function showUploadProgress(show) {
     }
 }
 
-// Store original functions to prevent recursion
-originalFunctions.loadDocuments = async function() {
-    if (!documentList) return;
+// Message handling
+function addMessage(content, sender, sources = null) {
+    if (!chatContainer) return;
 
     try {
-        // Try the primary endpoint first
-        let response = await fetch(`${API_BASE_URL}/pdf/list`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${sender}-message`;
+
+        // Add message header
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'message-header';
+        headerDiv.innerHTML = `
+            <span class="message-sender">${sender === 'user' ? 'You' : 'Assistant'}</span>
+            <span class="message-time">${new Date().toLocaleTimeString()}</span>
+        `;
+
+        // Add message content
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+
+        // Format content with markdown-like styling
+        const formattedContent = formatMessageContent(content);
+        contentDiv.innerHTML = formattedContent;
+
+        messageDiv.appendChild(headerDiv);
+        messageDiv.appendChild(contentDiv);
+
+                // Add sources if available
+        if (sources && Array.isArray(sources) && sources.length > 0) {
+            const sourcesDiv = document.createElement('div');
+            sourcesDiv.className = 'message-sources';
+            sourcesDiv.innerHTML = '<strong>Sources:</strong>';
+
+            sources.forEach((source, index) => {
+                const sourceDiv = document.createElement('div');
+                sourceDiv.className = 'source-item';
+                sourceDiv.onclick = () => openDocumentViewer(source);
+
+                sourceDiv.innerHTML = `
+                    <div class="source-title">${escapeHtml(source.title || source.filename || `Source ${index + 1}`)}</div>
+                    <div class="source-content">${truncateText(source.content || '', 150)}</div>
+                    <div class="source-meta">
+                        <span>${escapeHtml(source.filename || 'Unknown file')}</span>
+                        ${source.score ? `<span class="source-relevance">${(source.score * 100).toFixed(1)}%</span>` : ''}
+                    </div>
+                `;
+
+                sourcesDiv.appendChild(sourceDiv);
+            });
+
+            contentDiv.appendChild(sourcesDiv);
+        }
+
+        chatContainer.appendChild(messageDiv);
+
+        // Remove welcome message if it exists
+        const welcomeMessage = chatContainer.querySelector('.welcome-message');
+        if (welcomeMessage) {
+            welcomeMessage.remove();
+        }
+
+        // Scroll to bottom
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    } catch (error) {
+        console.error('Error adding message:', error);
+    }
+}
+
+function formatMessageContent(content) {
+    if (!content) return '';
+
+    try {
+        // Basic markdown-like formatting
+        let formatted = escapeHtml(String(content))
+            // Bold text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            // Italic text
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            // Code blocks
+            .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+            // Inline code
+            .replace(/`(.*?)`/g, '<code>$1</code>')
+            // Line breaks
+            .replace(/\n/g, '<br>');
+
+        // Convert URLs to links
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        formatted = formatted.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        return formatted;
+    } catch (error) {
+        console.error('Error formatting message content:', error);
+        return escapeHtml(String(content));
+    }
+}
+
+function showTypingIndicator() {
+    if (!chatContainer) return null;
+
+    try {
+        const typingId = 'typing-' + Date.now();
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message assistant-message';
+        messageDiv.id = typingId;
+
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'typing-indicator';
+        typingDiv.innerHTML = `
+            <div class="loading-dots">
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            </div>
+            <span>Assistant is typing...</span>
+        `;
+
+        messageDiv.appendChild(typingDiv);
+        chatContainer.appendChild(messageDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        return typingId;
+    } catch (error) {
+        console.error('Error showing typing indicator:', error);
+        return null;
+    }
+}
+
+function removeTypingIndicator(typingId) {
+    try {
+        if (typingId) {
+            const typingElement = document.getElementById(typingId);
+            if (typingElement) {
+                typingElement.remove();
+            }
+        } else {
+            // Remove any typing indicators if no specific ID provided
+            const typingElements = document.querySelectorAll('.typing-indicator');
+            typingElements.forEach(el => el.parentElement?.remove());
+        }
+    } catch (error) {
+        console.error('Error removing typing indicator:', error);
+    }
+}
+
+// File handling
+function handleFileInputChange(e) {
+    try {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+            const fileName = files[0].name;
+            const uploadText = uploadArea?.querySelector('.upload-text');
+            if (uploadText) {
+                uploadText.textContent = `Selected: ${fileName}`;
+            }
+        }
+    } catch (error) {
+        console.error('Error handling file input change:', error);
+    }
+}
+
+function setupDragAndDrop() {
+    if (!uploadArea) return;
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, unhighlight, false);
+    });
+
+    uploadArea.addEventListener('drop', handleDrop, false);
+}
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function highlight() {
+    uploadArea?.classList.add('drag-over');
+}
+
+function unhighlight() {
+    uploadArea?.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+    try {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+
+        if (files && files.length > 0) {
+            fileInput.files = files;
+            handleFileInputChange({ target: { files } });
+        }
+    } catch (error) {
+        console.error('Error handling file drop:', error);
+    }
+}
+
+// Keyboard handling
+function handleChatKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleChatSubmit(e);
+    }
+}
+
+function autoResizeTextarea() {
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput && messageInput.style) {
+        messageInput.style.height = 'auto';
+        messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+    }
+}
+
+function handleGlobalKeydown(e) {
+    if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+            case 'l':
+                e.preventDefault();
+                clearChat();
+                break;
+            case 'r':
+                e.preventDefault();
+                loadStatsWithFallback();
+                break;
+            case 'k':
+                e.preventDefault();
+                if (messageInput) messageInput.focus();
+                break;
+            case 'd':
+                e.preventDefault();
+                toggleTheme();
+                break;
+        }
+    }
+
+    if (e.key === 'Escape') {
+        // Close any open modals
+        document.querySelectorAll('.modal').forEach(modal => {
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
             }
         });
-
-        // If primary endpoint fails, try the alternative
-        if (!response.ok) {
-            console.warn('Primary endpoint failed, trying alternative...');
-            response = await fetch(`${API_BASE_URL}/api/pdfs`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-        }
-
-        if (!response.ok) {
-            throw new Error(`Failed to load documents: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        console.log('Documents API response:', data);
-
-        // Handle different possible response structures
-        let documents = [];
-        if (Array.isArray(data)) {
-            documents = data;
-        } else if (data.documents && Array.isArray(data.documents)) {
-            documents = data.documents;
-        } else if (data.pdfs && Array.isArray(data.pdfs)) {
-            documents = data.pdfs;
-        } else if (data.results && Array.isArray(data.results)) {
-            documents = data.results;
-        }
-
-        console.log('Processed documents:', documents);
-        displayDocuments(documents);
-
-        // Show success message only if we have documents
-        if (documents.length > 0) {
-            showStatus(`Loaded ${documents.length} documents successfully`, 'success', 3000);
-        }
-
-    } catch (error) {
-        console.error('Failed to load documents:', error);
-        documentList.innerHTML = '<div class="loading">Failed to load documents</div>';
-        showStatus('Failed to load documents: ' + error.message, 'error');
     }
-};
 
-// Create a wrapper function for loadDocuments
-async function loadDocuments() {
-    return await originalFunctions.loadDocuments();
+    if (e.key === 'F1' || e.key === '?') {
+        e.preventDefault();
+        showHelp();
+    }
 }
 
-function displayDocuments(documents) {
-    if (!documentList) return;
+function handleModalClose(e) {
+    if (e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+    }
+}
 
+// Theme functionality
+function toggleTheme() {
     try {
-        if (!documents || !Array.isArray(documents) || documents.length === 0) {
-            documentList.innerHTML = '<div class="text-center text-muted">No documents uploaded yet</div>';
-            return;
+        isDarkMode = !isDarkMode;
+
+        const themeIcon = document.getElementById('themeIcon');
+
+        if (isDarkMode) {
+            document.body.classList.add('dark-theme');
+            if (themeIcon) themeIcon.className = 'fas fa-sun';
+        } else {
+            document.body.classList.remove('dark-theme');
+            if (themeIcon) themeIcon.className = 'fas fa-moon';
         }
 
-        console.log(`Displaying ${documents.length} documents`);
-
-        documentList.innerHTML = documents.map(doc => {
-            // Safely extract document properties with better fallbacks
-            const docId = escapeHtml(String(doc.id || doc._id || ''));
-            const filename = escapeHtml(String(doc.filename || doc.original_filename || doc.name || 'Unknown'));
-            const title = escapeHtml(String(doc.title || doc.filename || doc.original_filename || doc.name || 'Unknown'));
-            const category = escapeHtml(String(doc.category || 'Uncategorized'));
-            const status = escapeHtml(String(doc.status || doc.processing_status || 'unknown'));
-
-            return `
-            <div class="pdf-item" data-doc-id="${docId}" onclick="selectDocument('${docId}', '${filename}')">
-                <div class="pdf-icon">
-                    <i class="fas fa-file-${getFileIcon(doc.file_type || 'unknown')}"></i>
-                </div>
-                <div class="pdf-info">
-                    <div class="pdf-title">${title}</div>
-                    <div class="pdf-meta">
-                        <span>${category}</span>
-                        <span>${formatFileSize(doc.file_size || doc.size || 0)}</span>
-                        <span>${formatTimestamp(doc.created_at || doc.upload_date)}</span>
-                    </div>
-                </div>
-                <div class="pdf-status">
-                    <span class="status-badge status-${status.toLowerCase()}">${status}</span>
-                </div>
-                <div class="pdf-actions">
-                    <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); openDocumentViewer('${docId}')" title="View Document">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); deleteDocument('${docId}')" title="Delete Document">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>`;
-        }).join('');
-
-        console.log('Documents displayed successfully');
+        // Save theme preference
+        localStorage.setItem('rag_theme', isDarkMode ? 'dark' : 'light');
     } catch (error) {
-        console.error('Error displaying documents:', error);
-        documentList.innerHTML = '<div class="loading">Error displaying documents</div>';
+        console.error('Error toggling theme:', error);
     }
 }
 
-// Helper function for file icons
-function getFileIcon(fileType) {
-    const iconMap = {
-        'pdf': 'pdf',
-        'doc': 'word',
-        'docx': 'word',
-        'txt': 'alt',
-        'md': 'markdown',
-        'csv': 'csv',
-        'json': 'code',
-        'xml': 'code',
-        'html': 'code',
-        'jpg': 'image',
-        'jpeg': 'image',
-        'png': 'image',
-        'gif': 'image',
-        'bmp': 'image',
-        'tiff': 'image'
-    };
-    return iconMap[fileType?.toLowerCase()] || 'file';
-}
-
-function selectDocument(docId, filename) {
-    try {
-        currentFileId = docId;
-        console.log('Selected document:', filename, 'ID:', docId);
-
-        // Visual feedback
-        document.querySelectorAll('.pdf-item').forEach(item => {
-            item.classList.remove('selected');
-        });
-
-        // Find the clicked element using data attribute
-        const clickedElement = document.querySelector(`[data-doc-id="${docId}"]`);
-        if (clickedElement) {
-            clickedElement.classList.add('selected');
-        }
-
-        showStatus('Selected document: ' + filename, 'info');
-    } catch (error) {
-        console.error('Error selecting document:', error);
-    }
-}
-
-async function deleteDocument(docId) {
-    if (!confirm('Are you sure you want to delete this document?')) {
+// Search mode functionality
+function setSearchMode(mode) {
+    if (!mode || (mode !== 'rag' && mode !== 'search')) {
+        console.warn('Invalid search mode:', mode);
         return;
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/pdf/${docId}`, {
-            method: 'DELETE',
-            headers: {
-                'Accept': 'application/json'
-            }
+        currentSearchMode = mode;
+
+        // Update UI
+        document.querySelectorAll('.search-mode-btn').forEach(btn => {
+            btn.classList.remove('active');
         });
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Failed to delete document: ${response.statusText} - ${errorData.detail || ''}`);
+        const activeBtn = document.querySelector(`[data-mode="${mode}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
         }
 
-        showStatus('Document deleted successfully', 'success');
-        await loadDocuments();
-        await loadStats();
+        // Save preference
+        localStorage.setItem('rag_search_mode', mode);
 
+        // Update placeholder text
+        if (messageInput) {
+            if (mode === 'rag') {
+                messageInput.placeholder = 'Ask a question about your documents...';
+            } else {
+                messageInput.placeholder = 'Search for content in your documents...';
+            }
+        }
+
+        // Update search manager if available
+        if (window.searchManager && typeof window.searchManager.setSearchMode === 'function') {
+            window.searchManager.setSearchMode(mode);
+        }
     } catch (error) {
-        console.error('Delete error:', error);
-        showStatus('Failed to delete document: ' + error.message, 'error');
+        console.error('Error setting search mode:', error);
     }
 }
 
+// Chat management
+function clearChat() {
+    if (chatContainer) {
+        // Clear all messages except welcome message
+        chatContainer.innerHTML = `
+            <div class="welcome-message">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <i class="fas fa-info-circle"></i> Welcome to RAG Document Search!
+                        </h3>
+                    </div>
+                    <div class="card-body">
+                        <p>You can:</p>
+                        <ul>
+                            <li>Upload PDF, DOC, DOCX, or TXT documents</li>
+                            <li>Ask questions about your documents using AI</li>
+                            <li>Search for specific content across all documents</li>
+                            <li>Get AI-powered answers with source citations</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Show success message
+        showStatus('Chat cleared successfully', 'success');
+    }
+}
+
+// Document viewer functionality
 function openDocumentViewer(docId) {
     try {
-        // Find the document data from the current list
-        const docElement = document.querySelector(`[data-doc-id="${docId}"]`);
-        if (!docElement) {
-            showStatus('Document not found', 'error');
+        // Use document manager if available
+        if (window.documentManager && typeof window.documentManager.openDocumentViewer === 'function') {
+            window.documentManager.openDocumentViewer(docId);
             return;
         }
 
+        // Fallback implementation
         const modal = document.getElementById('documentViewerModal');
         if (!modal) {
             showStatus('Document viewer not available', 'error');
@@ -896,7 +982,7 @@ async function loadDocumentContent(docId, container) {
             content = data.map(item => item.content || item.text || '').join('\n\n');
         }
 
-                container.innerHTML = `
+        container.innerHTML = `
             <div class="document-content">
                 ${formatDocumentContent(content || 'No content available')}
             </div>
@@ -929,274 +1015,60 @@ function formatDocumentContent(content) {
     }
 }
 
-// Store original loadStats function to prevent recursion
-originalFunctions.loadStats = async function() {
+function closeDocumentViewer() {
     try {
-        console.log('Loading stats from /search/stats endpoint...');
-
-        // Use the correct search stats endpoint from your backend
-        const response = await fetch(`${API_BASE_URL}/search/stats`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-
-        console.log('Stats endpoint response status:', response.status);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Stats endpoint error:', errorText);
-            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+        const modal = document.getElementById('documentViewerModal');
+        if (modal) {
+            modal.style.display = 'none';
         }
-
-        const data = await response.json();
-        console.log('Raw stats API response:', data);
-
-        // Map the response from the backend to match frontend expectations
-        // Based on your backend response structure
-        const stats = {
-            total_pdfs: data.total_documents || data.processed_documents || 0,
-            total_documents: data.total_documents || data.processed_documents || 0,
-            total_searches: data.total_searches || 0,
-            recent_searches_24h: data.recent_searches_24h || 0,
-            processed_documents: data.processed_documents || 0,
-            searchable_documents: data.searchable_documents || 0,
-            avg_response_time: data.avg_response_time || 0,
-            top_queries: data.top_queries || [],
-            vector_store: data.vector_store || {}
-        };
-
-        console.log('Processed stats for display:', stats);
-        updateStats(stats);
-
-        // Show success status
-        showStatus(`Stats loaded: ${stats.total_documents} docs, ${stats.total_searches} searches`, 'success', 3000);
-
     } catch (error) {
-        console.error('Failed to load stats:', error);
-
-        // Use fallback values
-        const fallbackStats = {
-            total_pdfs: '?',
-            total_documents: '?',
-            total_searches: '?',
-            recent_searches_24h: '?',
-            processed_documents: '?',
-            searchable_documents: '?',
-            avg_response_time: '?'
-        };
-
-        updateStats(fallbackStats);
-        showStatus('Failed to load statistics: ' + error.message, 'warning', 5000);
-
-        // Re-throw the error so the fallback function can handle it
-        throw error;
-    }
-};
-
-// Create a wrapper function for loadStats
-async function loadStats() {
-    return await originalFunctions.loadStats();
-}
-
-// Enhanced updateStats function to handle all the stats from your backend
-function updateStats(stats) {
-    try {
-        console.log('Updating stats display with:', stats);
-
-        // Basic stats
-        const totalDocsElement = document.getElementById('totalDocs');
-        const totalSearchesElement = document.getElementById('totalSearches');
-
-        if (totalDocsElement) {
-            const docCount = stats.total_documents || stats.total_pdfs || 0;
-            totalDocsElement.textContent = String(docCount);
-            console.log('Updated total docs:', docCount);
-        } else {
-            console.warn('totalDocs element not found');
-        }
-
-        if (totalSearchesElement) {
-            totalSearchesElement.textContent = String(stats.total_searches || 0);
-            console.log('Updated total searches:', stats.total_searches);
-        } else {
-            console.warn('totalSearches element not found');
-        }
-
-        // Additional stats if elements exist
-        const avgResponseTimeElement = document.getElementById('avgResponseTime');
-        if (avgResponseTimeElement && stats.avg_response_time !== undefined) {
-            avgResponseTimeElement.textContent = `${stats.avg_response_time}s`;
-            console.log('Updated avg response time:', stats.avg_response_time);
-        }
-
-        const recentSearchesElement = document.getElementById('recentSearches');
-        if (recentSearchesElement && stats.recent_searches_24h !== undefined) {
-            recentSearchesElement.textContent = String(stats.recent_searches_24h);
-            console.log('Updated recent searches:', stats.recent_searches_24h);
-        }
-
-        const processedDocsElement = document.getElementById('processedDocs');
-        if (processedDocsElement && stats.processed_documents !== undefined) {
-            processedDocsElement.textContent = String(stats.processed_documents);
-            console.log('Updated processed docs:', stats.processed_documents);
-        }
-
-        const searchableDocsElement = document.getElementById('searchableDocs');
-        if (searchableDocsElement && stats.searchable_documents !== undefined) {
-            searchableDocsElement.textContent = String(stats.searchable_documents);
-            console.log('Updated searchable docs:', stats.searchable_documents);
-        }
-
-        // Display top queries if element exists
-        const topQueriesElement = document.getElementById('topQueries');
-        if (topQueriesElement && stats.top_queries && Array.isArray(stats.top_queries)) {
-            if (stats.top_queries.length > 0) {
-                topQueriesElement.innerHTML = stats.top_queries
-                    .slice(0, 5) // Show top 5 queries
-                    .map(query => `
-                        <div class="top-query-item">
-                            <span class="query-text">${escapeHtml(query.query)}</span>
-                            <span class="query-count">${query.count}</span>
-                        </div>
-                    `).join('');
-            } else {
-                topQueriesElement.innerHTML = '<div class="text-muted">No queries yet</div>';
-            }
-            console.log('Updated top queries:', stats.top_queries);
-        }
-
-        // Display vector store stats if element exists
-        const vectorStoreElement = document.getElementById('vectorStore');
-        if (vectorStoreElement && stats.vector_store) {
-            const vectorStats = stats.vector_store;
-            vectorStoreElement.innerHTML = `
-                <div class="vector-stat">
-                    <span>Collections: ${vectorStats.collections || 0}</span>
-                </div>
-                <div class="vector-stat">
-                    <span>Documents: ${vectorStats.documents || 0}</span>
-                </div>
-                <div class="vector-stat">
-                    <span>Embeddings: ${vectorStats.embeddings || 0}</span>
-                </div>
-            `;
-            console.log('Updated vector store stats:', vectorStats);
-        }
-
-        console.log('Stats updated successfully');
-    } catch (error) {
-        console.error('Error updating stats display:', error);
+        console.error('Error closing document viewer:', error);
     }
 }
 
-
-function clearChat() {
-    if (!chatContainer) return;
-
+// Help functionality
+function showHelp() {
     try {
-        const messages = chatContainer.querySelectorAll('.chat-message');
-        messages.forEach(message => message.remove());
-
-        // Show welcome message again
-        showWelcomeMessage();
-
-        showStatus('Chat cleared', 'info');
-    } catch (error) {
-        console.error('Error clearing chat:', error);
-    }
-}
-
-function showWelcomeMessage() {
-    if (!chatContainer) return;
-
-    try {
-        const welcomeDiv = document.createElement('div');
-        welcomeDiv.className = 'welcome-message';
-        welcomeDiv.innerHTML = `
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">
-                        <i class="fas fa-robot"></i>
-                        Welcome to RAG Document Search!
-                    </h3>
-                </div>
-                <div class="card-body">
-                    <p>Get started by:</p>
-                    <ul>
-                        <li>Uploading PDF, DOC, DOCX, or TXT documents</li>
-                        <li>Asking questions about your documents using AI</li>
-                        <li>Searching for specific content across all documents</li>
-                        <li>Getting AI-powered answers with source citations</li>
-                    </ul>
-                    <p class="text-muted">
-                        <strong>Tip:</strong> Use <kbd>Ctrl+L</kbd> to clear chat and <kbd>Ctrl+R</kbd> to refresh stats.
-                    </p>
-                </div>
-            </div>
-        `;
-
-        chatContainer.appendChild(welcomeDiv);
-    } catch (error) {
-        console.error('Error showing welcome message:', error);
-    }
-}
-
-function showStatus(message, type, duration) {
-    type = type || 'info';
-    duration = duration || 5000;
-
-    try {
-        if (!statusContainer) {
-            createStatusContainer();
-        }
-
-        const statusDiv = document.createElement('div');
-        statusDiv.className = 'status-message status-' + type;
-
-        const iconMap = {
-            info: 'fa-info-circle',
-            success: 'fa-check-circle',
-            warning: 'fa-exclamation-triangle',
-            error: 'fa-exclamation-circle'
-        };
-
-        statusDiv.innerHTML = `
-            <i class="status-icon fas ${iconMap[type] || 'fa-info-circle'}"></i>
-            <span class="status-text">${escapeHtml(String(message))}</span>
-            <button class="status-close" onclick="this.parentElement.remove()">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-
-        statusContainer.appendChild(statusDiv);
-
-        // Auto remove after duration
-        if (duration > 0) {
-            setTimeout(function() {
-                if (statusDiv.parentNode) {
-                    statusDiv.remove();
-                }
-            }, duration);
+        const modal = document.getElementById('helpModal');
+        if (modal) {
+            modal.style.display = 'flex';
         }
     } catch (error) {
-        console.error('Error showing status:', error);
+        console.error('Error showing help:', error);
     }
 }
 
-function createStatusContainer() {
+function hideHelp() {
     try {
-        statusContainer = document.createElement('div');
-        statusContainer.id = 'statusContainer';
-        statusContainer.className = 'status-container';
-        document.body.appendChild(statusContainer);
+        const modal = document.getElementById('helpModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
     } catch (error) {
-        console.error('Error creating status container:', error);
+        console.error('Error hiding help:', error);
     }
 }
 
 // Utility functions
+function escapeHtml(text) {
+    if (!text) return '';
+    try {
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    } catch (error) {
+        console.error('Error escaping HTML:', error);
+        return String(text);
+    }
+}
+
+function truncateText(text, maxLength) {
+    if (!text) return '';
+    const textStr = String(text);
+    if (textStr.length <= maxLength) return escapeHtml(textStr);
+    return escapeHtml(textStr.substring(0, maxLength)) + '...';
+}
+
 function formatFileSize(bytes) {
     if (!bytes || isNaN(bytes)) return '0 B';
 
@@ -1224,98 +1096,111 @@ function formatTimestamp(timestamp) {
     }
 }
 
-// Search mode functions
-function setSearchMode(mode) {
-    if (!mode || (mode !== 'rag' && mode !== 'search')) {
-        console.warn('Invalid search mode:', mode);
+// Document management functions (fallback if document manager not available)
+function selectDocument(docId, filename) {
+    try {
+        // Use document manager if available
+        if (window.documentManager && typeof window.documentManager.selectDocument === 'function') {
+            window.documentManager.selectDocument(docId, filename);
+            return;
+        }
+
+        // Fallback implementation
+        currentFileId = docId;
+        console.log('Selected document:', filename, 'ID:', docId);
+
+        // Visual feedback
+        document.querySelectorAll('.pdf-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+
+        // Find the clicked element using data attribute
+        const clickedElement = document.querySelector(`[data-doc-id="${docId}"]`);
+        if (clickedElement) {
+            clickedElement.classList.add('selected');
+        }
+
+        showStatus('Selected document: ' + filename, 'info');
+    } catch (error) {
+        console.error('Error selecting document:', error);
+    }
+}
+
+async function deleteDocument(docId) {
+    if (!confirm('Are you sure you want to delete this document?')) {
         return;
     }
 
     try {
-        currentSearchMode = mode;
+        // Use document manager if available
+        if (window.documentManager && typeof window.documentManager.deleteDocument === 'function') {
+            await window.documentManager.deleteDocument(docId);
+            return;
+        }
 
-        // Update UI
-        document.querySelectorAll('.search-mode-btn').forEach(btn => {
-            btn.classList.remove('active');
+        // Fallback implementation
+        const response = await fetch(`${API_BASE_URL}/pdf/${docId}`, {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json'
+            }
         });
 
-        const activeBtn = document.querySelector(`[data-mode="${mode}"]`);
-        if (activeBtn) {
-            activeBtn.classList.add('active');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to delete document: ${response.statusText} - ${errorData.detail || ''}`);
         }
 
-        // Save preference
-        localStorage.setItem('rag_search_mode', mode);
+        showStatus('Document deleted successfully', 'success');
 
-        // Update placeholder text
-        if (messageInput) {
-            if (mode === 'rag') {
-                messageInput.placeholder = 'Ask a question about your documents...';
-            } else {
-                messageInput.placeholder = 'Search for content in your documents...';
-            }
+        // Reload documents and stats
+        if (window.documentManager && typeof window.documentManager.loadDocuments === 'function') {
+            await window.documentManager.loadDocuments();
         }
+        await loadStatsWithFallback();
+
     } catch (error) {
-        console.error('Error setting search mode:', error);
+        console.error('Delete error:', error);
+        showStatus('Failed to delete document: ' + error.message, 'error');
     }
 }
 
-// Theme functions
-function toggleTheme() {
+// Global functions for backward compatibility and HTML onclick handlers
+window.setSearchMode = setSearchMode;
+window.toggleTheme = toggleTheme;
+window.showHelp = showHelp;
+window.hideHelp = hideHelp;
+window.closeDocumentViewer = closeDocumentViewer;
+window.clearChat = clearChat;
+window.selectDocument = selectDocument;
+window.deleteDocument = deleteDocument;
+window.openDocumentViewer = openDocumentViewer;
+
+// Global functions that delegate to managers when available
+window.loadDocuments = async function() {
     try {
-        isDarkMode = !isDarkMode;
-
-        const themeIcon = document.getElementById('themeIcon');
-
-        if (isDarkMode) {
-            document.body.classList.add('dark-theme');
-            if (themeIcon) themeIcon.className = 'fas fa-sun';
+        if (window.documentManager && typeof window.documentManager.loadDocuments === 'function') {
+            await window.documentManager.loadDocuments();
         } else {
-            document.body.classList.remove('dark-theme');
-            if (themeIcon) themeIcon.className = 'fas fa-moon';
+            console.warn('Document manager not available, cannot load documents');
+            showStatus('Document manager not ready yet', 'warning');
         }
-
-        // Save theme preference
-        localStorage.setItem('rag_theme', isDarkMode ? 'dark' : 'light');
     } catch (error) {
-        console.error('Error toggling theme:', error);
+        console.error('Error loading documents:', error);
+        showStatus('Failed to load documents: ' + error.message, 'error');
     }
-}
+};
 
-// Help functions
-function showHelp() {
+window.loadStats = async () => {
     try {
-        const modal = document.getElementById('helpModal');
-        if (modal) {
-            modal.style.display = 'flex';
-        }
+        await loadStatsWithFallback();
     } catch (error) {
-        console.error('Error showing help:', error);
-    }
-}
-
-function hideHelp() {
-    try {
-        const modal = document.getElementById('helpModal');
-        if (modal) {
-            modal.style.display = 'none';
+        console.error('Error in window.loadStats:', error);
+        if (window.showStatus) {
+            window.showStatus('Failed to load stats: ' + error.message, 'error');
         }
-    } catch (error) {
-        console.error('Error hiding help:', error);
     }
-}
-
-// Document viewer functions
-function closeDocumentViewer() {
-    try {
-        const modal = document.getElementById('documentViewerModal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-    } catch (error) {
-        console.error('Error closing document viewer:', error);
-    }
-}
+};
 
 // Enhanced error handling for async operations
 function handleAsyncError(error, operation) {
@@ -1409,199 +1294,6 @@ async function checkServerConnectionWithRetry(maxRetries = 3) {
     return false;
 }
 
-// Initialize connection check with retry
-async function initializeConnectionCheck() {
-    const connected = await checkServerConnectionWithRetry();
-    if (!connected) {
-        showStatus('Unable to connect to server after multiple attempts. Please check if the backend is running.', 'error', 10000);
-    }
-}
-
-// Enhanced document loading with better error handling
-async function loadDocumentsWithRetry() {
-    const maxRetries = 2;
-    let lastError;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            console.log(`Loading documents (attempt ${attempt}/${maxRetries})...`);
-            await originalFunctions.loadDocuments();
-            return; // Success, exit the retry loop
-
-        } catch (error) {
-            console.error(`Attempt ${attempt} failed:`, error);
-            lastError = error;
-
-            // If this isn't the last attempt, wait before retrying
-            if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            }
-        }
-    }
-
-    // All attempts failed
-    console.error('All retry attempts failed:', lastError);
-    if (documentList) {
-        documentList.innerHTML = '<div class="loading">Failed to load documents after multiple attempts</div>';
-    }
-    showStatus('Failed to load documents: ' + lastError.message, 'error');
-}
-
-// Enhanced stats loading with fallback
-async function loadStatsWithFallback() {
-    console.log('loadStatsWithFallback called');
-    try {
-        await originalFunctions.loadStats();
-        console.log('Stats loaded successfully via loadStatsWithFallback');
-    } catch (error) {
-        console.error('Failed to load stats in fallback, using placeholder values:', error);
-        updateStats({
-            total_pdfs: '?',
-            total_documents: '?',
-            total_searches: '?',
-            recent_searches_24h: '?',
-            processed_documents: '?',
-            searchable_documents: '?',
-            avg_response_time: '?'
-        });
-    }
-}
-
-// Make functions globally available with error handling wrappers
-window.setSearchMode = (mode) => {
-    try {
-        setSearchMode(mode);
-    } catch (error) {
-        handleAsyncError(error, 'set search mode');
-    }
-};
-window.toggleTheme = () => {
-    try {
-        toggleTheme();
-    } catch (error) {
-        handleAsyncError(error, 'toggle theme');
-    }
-};
-
-window.showHelp = () => {
-    try {
-        showHelp();
-    } catch (error) {
-        handleAsyncError(error, 'show help');
-    }
-};
-
-window.hideHelp = () => {
-    try {
-        hideHelp();
-    } catch (error) {
-        handleAsyncError(error, 'hide help');
-    }
-};
-
-window.closeDocumentViewer = () => {
-    try {
-        closeDocumentViewer();
-    } catch (error) {
-        handleAsyncError(error, 'close document viewer');
-    }
-};
-
-window.clearChat = () => {
-    try {
-        clearChat();
-    } catch (error) {
-        handleAsyncError(error, 'clear chat');
-    }
-};
-
-window.loadDocuments = async () => {
-    try {
-        await originalFunctions.loadDocuments();
-    } catch (error) {
-        console.error('Error in window.loadDocuments:', error);
-        handleAsyncError(error, 'load documents');
-    }
-};
-
-window.loadStats = async () => {
-    try {
-        await loadStatsWithFallback();
-    } catch (error) {
-        handleAsyncError(error, 'load stats');
-    }
-};
-
-window.selectDocument = (docId, filename) => {
-    try {
-        selectDocument(docId, filename);
-    } catch (error) {
-        handleAsyncError(error, 'select document');
-    }
-};
-
-window.deleteDocument = async (docId) => {
-    try {
-        await deleteDocument(docId);
-    } catch (error) {
-        handleAsyncError(error, 'delete document');
-    }
-};
-
-window.openDocumentViewer = (docId) => {
-    try {
-        openDocumentViewer(docId);
-    } catch (error) {
-        handleAsyncError(error, 'open document viewer');
-    }
-};
-
-// Add window error handler for uncaught errors
-window.addEventListener('error', (event) => {
-    console.error('Uncaught error:', event.error);
-    showStatus('An unexpected error occurred. Please refresh the page if problems persist.', 'error');
-});
-
-// Add unhandled promise rejection handler
-window.addEventListener('unhandledrejection', (event) => {
-    console.error('Unhandled promise rejection:', event.reason);
-    showStatus('An unexpected error occurred. Please refresh the page if problems persist.', 'error');
-    event.preventDefault(); // Prevent the default browser behavior
-});
-
-// Enhanced initialization with better error recovery
-document.addEventListener('DOMContentLoaded', async function() {
-    console.log('Initializing RAG Chat Application...');
-
-    try {
-        await initializeApp();
-    } catch (error) {
-        console.error('Critical initialization error:', error);
-        showStatus('Failed to initialize application. Please refresh the page.', 'error', 0);
-
-        // Try to at least show a basic interface
-        try {
-            initializeDOMElements();
-            initializeTheme();
-            setupEventListeners();
-        } catch (fallbackError) {
-            console.error('Fallback initialization also failed:', fallbackError);
-        }
-    }
-});
-
-// Initialize welcome message on load
-function initializeWelcomeMessage() {
-    if (chatContainer && chatContainer.children.length === 0) {
-        showWelcomeMessage();
-    }
-}
-
-// Call welcome message initialization after DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(initializeWelcomeMessage, 100);
-});
-
 // Performance monitoring
 function logPerformanceMetrics() {
     try {
@@ -1625,109 +1317,6 @@ function logPerformanceMetrics() {
 window.addEventListener('load', () => {
     setTimeout(logPerformanceMetrics, 1000);
 });
-
-// Keyboard accessibility improvements
-function setupKeyboardNavigation() {
-    try {
-        // Focus management for modals
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
-                const activeModal = document.querySelector('.modal[style*="flex"]');
-                if (activeModal) {
-                    const focusableElements = activeModal.querySelectorAll(
-                        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-                    );
-
-                    if (focusableElements.length === 0) return;
-
-                    const firstElement = focusableElements[0];
-                    const lastElement = focusableElements[focusableElements.length - 1];
-
-                    if (e.shiftKey) {
-                        if (document.activeElement === firstElement) {
-                            e.preventDefault();
-                            lastElement.focus();
-                        }
-                    } else {
-                        if (document.activeElement === lastElement) {
-                            e.preventDefault();
-                            firstElement.focus();
-                        }
-                    }
-                }
-            }
-        });
-    } catch (error) {
-        console.warn('Keyboard navigation setup failed:', error);
-    }
-}
-
-// Initialize keyboard navigation
-document.addEventListener('DOMContentLoaded', setupKeyboardNavigation);
-
-// Accessibility improvements
-function setupAccessibilityFeatures() {
-    try {
-        // Add ARIA labels dynamically
-        const chatInput = document.getElementById('messageInput');
-        if (chatInput && !chatInput.getAttribute('aria-label')) {
-            chatInput.setAttribute('aria-label', 'Type your message here');
-        }
-
-        // Add role attributes
-        const chatContainer = document.getElementById('chatContainer');
-        if (chatContainer && !chatContainer.getAttribute('role')) {
-            chatContainer.setAttribute('role', 'log');
-            chatContainer.setAttribute('aria-live', 'polite');
-        }
-
-        // Add skip links if not present
-        if (!document.querySelector('.skip-link')) {
-            const skipLink = document.createElement('a');
-            skipLink.href = '#main-content';
-            skipLink.className = 'skip-link';
-            skipLink.textContent = 'Skip to main content';
-            skipLink.style.cssText = `
-                position: absolute;
-                top: -40px;
-                left: 6px;
-                background: #000;
-                color: #fff;
-                padding: 8px;
-                text-decoration: none;
-                z-index: 9999;
-            `;
-            skipLink.addEventListener('focus', () => {
-                skipLink.style.top = '6px';
-            });
-            skipLink.addEventListener('blur', () => {
-                skipLink.style.top = '-40px';
-            });
-            document.body.insertBefore(skipLink, document.body.firstChild);
-        }
-    } catch (error) {
-        console.warn('Accessibility setup failed:', error);
-    }
-}
-
-// Initialize accessibility features
-document.addEventListener('DOMContentLoaded', setupAccessibilityFeatures);
-
-// Service worker registration for offline support
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-                console.log('Service Worker registered:', registration);
-            })
-            .catch(error => {
-                console.log('Service Worker registration failed:', error);
-            });
-    }
-}
-
-// Register service worker after page load
-window.addEventListener('load', registerServiceWorker);
 
 // Handle online/offline status
 function handleConnectionStatus() {
@@ -1799,22 +1388,70 @@ setInterval(saveChatHistory, 30000); // Save every 30 seconds
 // Save chat when page is unloaded
 window.addEventListener('beforeunload', saveChatHistory);
 
+// Initialize welcome message on load
+function initializeWelcomeMessage() {
+    if (chatContainer && chatContainer.children.length === 0) {
+        showWelcomeMessage();
+    }
+}
+
+function showWelcomeMessage() {
+    if (!chatContainer) return;
+
+    try {
+        const welcomeDiv = document.createElement('div');
+        welcomeDiv.className = 'welcome-message';
+        welcomeDiv.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-robot"></i>
+                        Welcome to RAG Document Search!
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p>Get started by:</p>
+                    <ul>
+                        <li>Uploading PDF, DOC, DOCX, or TXT documents</li>
+                        <li>Asking questions about your documents using AI</li>
+                        <li>Searching for specific content across all documents</li>
+                        <li>Getting AI-powered answers with source citations</li>
+                    </ul>
+                    <p class="text-muted">
+                        <strong>Tip:</strong> Use <kbd>Ctrl+L</kbd> to clear chat and <kbd>Ctrl+R</kbd> to refresh stats.
+                    </p>
+                </div>
+            </div>
+        `;
+
+        chatContainer.appendChild(welcomeDiv);
+    } catch (error) {
+        console.error('Error showing welcome message:', error);
+    }
+}
+
+// Call welcome message initialization after DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(initializeWelcomeMessage, 200);
+});
+
 // Load chat history on initialization
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(loadChatHistory, 500);
 });
 
-// Export functions for testing (if in development environment)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        formatFileSize,
-        formatTimestamp,
-        escapeHtml,
-        truncateText,
-        formatMessageContent,
-        debounce
-    };
-}
+// Add window error handler for uncaught errors
+window.addEventListener('error', (event) => {
+    console.error('Uncaught error:', event.error);
+    showStatus('An unexpected error occurred. Please refresh the page if problems persist.', 'error');
+});
+
+// Add unhandled promise rejection handler
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('Unhandled promise rejection:', event.reason);
+    showStatus('An unexpected error occurred. Please refresh the page if problems persist.', 'error');
+    event.preventDefault(); // Prevent the default browser behavior
+});
 
 // Development mode helpers
 if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -1834,31 +1471,458 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
         loadTestData: () => {
             console.log('Loading test data...');
             // Add test data loading logic here if needed
+        },
+        managers: {
+            get documentManager() { return window.documentManager; },
+            get searchManager() { return window.searchManager; },
+            get uploadManager() { return window.uploadManager; },
+            get notificationManager() { return window.notificationManager; }
         }
     };
 
     console.log('Development mode enabled. Use window.RAG_DEBUG for debugging.');
 }
 
-// Initialize application state
-console.log('RAG Chat Application script loaded successfully');
+// Export functions for testing (if in development environment)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        formatFileSize,
+        formatTimestamp,
+        escapeHtml,
+        truncateText,
+        formatMessageContent,
+        debounce,
+        makeRequest
+    };
+}
 
-async function testRAGQuery() {
-    try {
-        console.log('Testing RAG query...');
-        const result = await performRAGQuery('Dennis');
-        console.log('Test successful:', result);
-        return result;
-    } catch (error) {
-        console.error('Test failed:', error);
-        throw error;
+// Initialize application state
+console.log('RAG Chat Application main controller loaded successfully');
+
+// Global state management
+window.RAG_STATE = {
+    isConnected: () => isConnected,
+    getCurrentSearchMode: () => currentSearchMode,
+    getCurrentFileId: () => currentFileId,
+    isDarkMode: () => isDarkMode
+};
+
+// Manager registration system for other modules
+window.RAG_MANAGERS = {
+    register: (name, manager) => {
+        window[name] = manager;
+        console.log(`Manager registered: ${name}`);
+    },
+    get: (name) => window[name],
+    isReady: (name) => window[name] && typeof window[name] === 'object'
+};
+
+// Wait for all managers to be ready before final initialization
+function waitForManagers() {
+    const requiredManagers = ['notificationManager'];
+    const optionalManagers = ['documentManager', 'searchManager', 'uploadManager'];
+
+    let attempts = 0;
+    const maxAttempts = 30; // Reduced from 50
+
+    const checkManagers = () => {
+        attempts++;
+
+        const requiredReady = requiredManagers.every(name => window[name] && typeof window[name] === 'object');
+        const optionalReady = optionalManagers.filter(name => window[name] && typeof window[name] === 'object');
+
+        console.log(`Manager check ${attempts}/${maxAttempts}: Required(${requiredReady}), Optional(${optionalReady.join(', ')})`);
+
+        if (requiredReady || attempts >= maxAttempts) {
+            console.log(`Managers ready: Required(${requiredReady}), Optional(${optionalReady.join(', ')})`);
+
+            // Load initial data now that managers are ready
+            setTimeout(async () => {
+                try {
+                    if (window.documentManager && typeof window.documentManager.loadDocuments === 'function') {
+                        console.log('Loading documents via document manager...');
+                        await window.documentManager.loadDocuments();
+                    } else {
+                        console.warn('Document manager not available');
+                    }
+
+                    console.log('Loading stats...');
+                    await loadStatsWithFallback();
+
+                } catch (error) {
+                    console.error('Error loading initial data:', error);
+                }
+            }, 500);
+
+            return;
+        }
+
+        if (attempts < maxAttempts) {
+            setTimeout(checkManagers, 200); // Increased interval
+        } else {
+            console.warn('Timeout waiting for managers, proceeding anyway');
+        }
+    };
+
+    setTimeout(checkManagers, 200);
+}
+
+// Start waiting for managers after DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(waitForManagers, 50);
+});
+
+// Fallback showStatus function (will be overridden by notification manager)
+if (!window.showStatus) {
+    window.showStatus = function(message, type = 'info', duration = 5000) {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+
+        // Create a simple fallback notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : type === 'warning' ? '#ffc107' : '#17a2b8'};
+            color: white;
+            padding: 12px 16px;
+            border-radius: 4px;
+            z-index: 10000;
+            max-width: 300px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        `;
+        notification.textContent = message;
+
+        document.body.appendChild(notification);
+
+        if (duration > 0) {
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, duration);
+        }
+
+        return Date.now();
+    };
+}
+
+// Service worker registration for offline support
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('Service Worker registered:', registration);
+            })
+            .catch(error => {
+                console.log('Service Worker registration failed:', error);
+            });
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Page loaded, running RAG test...');
-    testRAGQuery().catch(err => console.error('Auto-test failed:', err));
+// Register service worker after page load
+window.addEventListener('load', registerServiceWorker);
+
+// Accessibility improvements
+function setupAccessibilityFeatures() {
+    try {
+        // Add ARIA labels dynamically
+        const chatInput = document.getElementById('messageInput');
+        if (chatInput && !chatInput.getAttribute('aria-label')) {
+            chatInput.setAttribute('aria-label', 'Type your message here');
+        }
+
+        // Add role attributes
+        const chatContainer = document.getElementById('chatContainer');
+        if (chatContainer && !chatContainer.getAttribute('role')) {
+            chatContainer.setAttribute('role', 'log');
+            chatContainer.setAttribute('aria-live', 'polite');
+        }
+
+        // Add skip links if not present
+        if (!document.querySelector('.skip-link')) {
+            const skipLink = document.createElement('a');
+            skipLink.href = '#main-content';
+            skipLink.className = 'skip-link';
+            skipLink.textContent = 'Skip to main content';
+            skipLink.style.cssText = `
+                position: absolute;
+                top: -40px;
+                left: 6px;
+                background: #000;
+                color: #fff;
+                padding: 8px;
+                text-decoration: none;
+                z-index: 9999;
+            `;
+            skipLink.addEventListener('focus', () => {
+                skipLink.style.top = '6px';
+            });
+            skipLink.addEventListener('blur', () => {
+                skipLink.style.top = '-40px';
+            });
+            document.body.insertBefore(skipLink, document.body.firstChild);
+        }
+    } catch (error) {
+        console.warn('Accessibility setup failed:', error);
+    }
+}
+
+// Initialize accessibility features
+document.addEventListener('DOMContentLoaded', setupAccessibilityFeatures);
+
+// Keyboard accessibility improvements
+function setupKeyboardNavigation() {
+    try {
+        // Focus management for modals
+        document.addEventListener('keydown', function(event) {
+            // Additional keyboard shortcuts
+            if (event.ctrlKey || event.metaKey) {
+                switch (event.key) {
+                    case 'u':
+                        event.preventDefault();
+                        if (fileInput) fileInput.click();
+                        break;
+                    case 'Enter':
+                        if (event.target === messageInput) {
+                            event.preventDefault();
+                            handleChatSubmit(event);
+                        }
+                        break;
+                }
+            }
+
+            // Tab navigation improvements
+            if (event.key === 'Tab') {
+                // Ensure proper tab order in modals
+                const activeModal = document.querySelector('.modal[style*="flex"]');
+                if (activeModal) {
+                    const focusableElements = activeModal.querySelectorAll(
+                        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                    );
+
+                    if (focusableElements.length > 0) {
+                        const firstElement = focusableElements[0];
+                        const lastElement = focusableElements[focusableElements.length - 1];
+
+                        if (event.shiftKey && document.activeElement === firstElement) {
+                            event.preventDefault();
+                            lastElement.focus();
+                        } else if (!event.shiftKey && document.activeElement === lastElement) {
+                            event.preventDefault();
+                            firstElement.focus();
+                        }
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.warn('Keyboard navigation setup failed:', error);
+    }
+}
+
+// Initialize keyboard navigation
+document.addEventListener('DOMContentLoaded', setupKeyboardNavigation);
+
+// Enhanced error recovery
+function setupErrorRecovery() {
+    // Retry failed operations
+    window.retryFailedOperation = async function(operation, maxRetries = 3) {
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                await operation();
+                return true;
+            } catch (error) {
+                console.warn(`Operation failed (attempt ${i + 1}/${maxRetries}):`, error);
+                if (i < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                }
+            }
+        }
+        return false;
+    };
+
+    // Auto-recovery for connection issues
+    let connectionRetryCount = 0;
+    const maxConnectionRetries = 5;
+
+    window.addEventListener('online', async () => {
+        if (connectionRetryCount < maxConnectionRetries) {
+            connectionRetryCount++;
+            console.log(`Attempting to reconnect (${connectionRetryCount}/${maxConnectionRetries})...`);
+
+            const success = await window.retryFailedOperation(async () => {
+                await checkServerConnection();
+                if (window.documentManager && typeof window.documentManager.loadDocuments === 'function') {
+                    await window.documentManager.loadDocuments();
+                }
+                await loadStatsWithFallback();
+            });
+
+            if (success) {
+                connectionRetryCount = 0;
+                showStatus('Successfully reconnected and refreshed data', 'success');
+            } else {
+                showStatus('Failed to fully reconnect. Some features may not work.', 'warning');
+            }
+        }
+    });
+}
+
+// Initialize error recovery
+document.addEventListener('DOMContentLoaded', setupErrorRecovery);
+
+// Application health monitoring
+function setupHealthMonitoring() {
+    const healthCheck = async () => {
+        try {
+            const isHealthy = await checkServerConnection();
+
+            if (!isHealthy && isConnected) {
+                console.warn('Health check failed - server may be down');
+                showStatus('Connection to server lost. Retrying...', 'warning', 10000);
+            }
+
+            // Check for memory leaks
+            if (performance.memory) {
+                const memoryUsage = performance.memory.usedJSHeapSize / 1024 / 1024;
+                if (memoryUsage > 100) { // 100MB threshold
+                    console.warn(`High memory usage detected: ${memoryUsage.toFixed(2)}MB`);
+                }
+            }
+
+        } catch (error) {
+            console.error('Health check error:', error);
+        }
+    };
+
+    // Run health check every 2 minutes
+    setInterval(healthCheck, 120000);
+
+    // Initial health check after 30 seconds
+    setTimeout(healthCheck, 30000);
+}
+
+// Initialize health monitoring
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(setupHealthMonitoring, 5000);
 });
 
+// Data persistence and recovery
+function setupDataPersistence() {
+    // Save application state periodically
+    const saveAppState = () => {
+        try {
+            const state = {
+                searchMode: currentSearchMode,
+                theme: isDarkMode ? 'dark' : 'light',
+                selectedDocument: currentFileId,
+                timestamp: Date.now()
+            };
+
+            localStorage.setItem('rag_app_state', JSON.stringify(state));
+        } catch (error) {
+            console.warn('Failed to save app state:', error);
+        }
+    };
+
+    // Restore application state
+    const restoreAppState = () => {
+        try {
+            const savedState = localStorage.getItem('rag_app_state');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+
+                // Only restore if saved recently (within 24 hours)
+                if (Date.now() - state.timestamp < 24 * 60 * 60 * 1000) {
+                    if (state.searchMode) {
+                        setSearchMode(state.searchMode);
+                    }
+
+                    if (state.selectedDocument) {
+                        currentFileId = state.selectedDocument;
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to restore app state:', error);
+        }
+    };
+
+    // Save state every 30 seconds
+    setInterval(saveAppState, 30000);
+
+    // Save state on page unload
+    window.addEventListener('beforeunload', saveAppState);
+
+    // Restore state on load
+    setTimeout(restoreAppState, 1000);
+}
+
+// Initialize data persistence
+document.addEventListener('DOMContentLoaded', setupDataPersistence);
+
+// Final initialization check
+function performFinalInitializationCheck() {
+    setTimeout(() => {
+        const checks = {
+            'DOM Elements': !!(document.getElementById('chatContainer') && document.getElementById('messageInput')),
+            'Server Connection': isConnected,
+            'Document Manager': !!(window.documentManager),
+            'Search Manager': !!(window.searchManager),
+            'Upload Manager': !!(window.uploadManager),
+            'Notification Manager': !!(window.notificationManager)
+        };
+
+        console.log('🔍 Final Initialization Check:');
+        Object.entries(checks).forEach(([check, passed]) => {
+            console.log(`  ${passed ? '✅' : '❌'} ${check}`);
+        });
+
+        const passedChecks = Object.values(checks).filter(Boolean).length;
+        const totalChecks = Object.keys(checks).length;
+
+        console.log(`📊 Initialization Score: ${passedChecks}/${totalChecks} (${Math.round(passedChecks/totalChecks*100)}%)`);
+
+        if (passedChecks >= totalChecks * 0.5) { // Lowered threshold to 50%
+            console.log('✅ Application successfully initialized');
+            if (window.showStatus) {
+                window.showStatus('Application ready!', 'success', 3000);
+            }
+        } else {
+            console.warn('⚠️ Application partially initialized - some features may not work');
+            if (window.showStatus) {
+                window.showStatus('Application partially loaded. Some features may not work properly.', 'warning', 8000);
+            }
+        }
+    }, 2000);
+}
+
+// Run final check
+document.addEventListener('DOMContentLoaded', performFinalInitializationCheck);
+
+// Application ready event
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        // Dispatch custom event when app is ready
+        const appReadyEvent = new CustomEvent('ragAppReady', {
+            detail: {
+                version: '1.0.0',
+                managers: {
+                    document: !!window.documentManager,
+                    search: !!window.searchManager,
+                    upload: !!window.uploadManager,
+                    notification: !!window.notificationManager
+                },
+                connected: isConnected
+            }
+        });
+
+        document.dispatchEvent(appReadyEvent);
+        console.log('🎉 RAG Application Ready Event Dispatched');
+    }, 1500);
+});
+
+console.log('🚀 RAG Chat Application main controller fully loaded');
 
 

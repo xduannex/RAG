@@ -7,9 +7,11 @@ from datetime import datetime
 import re
 import shutil
 
+import pytesseract
+
 logger = logging.getLogger(__name__)
 
-
+pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesseract.exe'
 class DocumentProcessor:
     """Universal document processor supporting multiple file types"""
 
