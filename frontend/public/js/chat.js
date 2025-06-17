@@ -1,103 +1,477 @@
 // RAG Chat Application - Chat Management
-// Handles chat interface, messages, and conversation flow
+// Handles chat interface, message sending, and RAG responses
 
 class ChatManager {
-    constructor() {
-        this.messages = [];
-        this.typingIndicators = new Map();
+    constructor(apiBaseUrl) {
+        this.apiBaseUrl = apiBaseUrl;
+        this.chatContainer = null;
+        this.messageInput = null;
+        this.sendButton = null;
+        this.chatForm = null;
+        this.currentSearchMode = 'rag'; // 'rag' or 'search'
+        this.isProcessing = false;
         this.messageHistory = [];
-        this.maxHistorySize = 100;
         this.init();
     }
 
     init() {
-        this.loadChatHistory();
-        this.setupAutoSave();
+        console.log('Initializing Chat Manager...');
+        this.setupElements();
+        this.setupEventListeners();
+
+        // Register globally
+        window.chatManager = this;
+
+        // Load saved search mode
+        const savedMode = localStorage.getItem('rag_search_mode') || 'rag';
+        this.setSearchMode(savedMode);
+
+        console.log('Chat manager initialized');
     }
 
-    addMessage(content, sender, sources = null) {
-        if (!chatContainer) return;
+    setupElements() {
+        this.chatContainer = document.getElementById('chatContainer');
+        this.messageInput = document.getElementById('messageInput');
+        this.sendButton = document.getElementById('sendButton');
+        this.chatForm = document.getElementById('chatForm');
 
-        try {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `chat-message ${sender}-message`;
-
-            // Add message header
-            const headerDiv = document.createElement('div');
-            headerDiv.className = 'message-header';
-            headerDiv.innerHTML = `
-                <span class="message-sender">${sender === 'user' ? 'You' : 'Assistant'}</span>
-                <span class="message-time">${new Date().toLocaleTimeString()}</span>
-            `;
-
-            // Add message content
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'message-content';
-
-            // Format content with markdown-like styling
-            const formattedContent = this.formatMessageContent(content);
-            contentDiv.innerHTML = formattedContent;
-
-            messageDiv.appendChild(headerDiv);
-            messageDiv.appendChild(contentDiv);
-
-            // Add sources if available
-            if (sources && Array.isArray(sources) && sources.length > 0) {
-                const sourcesDiv = this.createSourcesElement(sources);
-                contentDiv.appendChild(sourcesDiv);
-            }
-
-            chatContainer.appendChild(messageDiv);
-
-            // Remove welcome message if it exists
-            const welcomeMessage = chatContainer.querySelector('.welcome-message');
-            if (welcomeMessage) {
-                welcomeMessage.remove();
-            }
-
-            // Scroll to bottom
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            // Store message
-            this.messages.push({
-                content,
-                sender,
-                sources,
-                timestamp: Date.now()
-            });
-
-            // Limit message history
-            if (this.messages.length > this.maxHistorySize) {
-                this.messages = this.messages.slice(-this.maxHistorySize);
-            }
-
-        } catch (error) {
-            console.error('Error adding message:', error);
+        if (!this.chatContainer || !this.messageInput || !this.sendButton || !this.chatForm) {
+            console.error('Required chat elements not found');
         }
     }
 
-    createSourcesElement(sources) {
-        const sourcesDiv = document.createElement('div');
-        sourcesDiv.className = 'message-sources';
-        sourcesDiv.innerHTML = '<strong>Sources:</strong>';
+    setupEventListeners() {
+        if (this.chatForm) {
+            this.chatForm.addEventListener('submit', (e) => this.handleSubmit(e));
+        }
 
-        sources.forEach((source, index) => {
-            const sourceDiv = document.createElement('div');
-            sourceDiv.className = 'source-item';
-            sourceDiv.onclick = () => this.openSourceDocument(source);
+        if (this.messageInput) {
+            // Auto-resize textarea
+            this.messageInput.addEventListener('input', () => {
+                this.autoResizeTextarea();
+            });
 
-            sourceDiv.innerHTML = `
-                <div class="source-title">${escapeHtml(source.title || source.filename || `Source ${index + 1}`)}</div>
-                <div class="source-content">${this.truncateText(source.content || '', 150)}</div>
-                <div class="source-meta">
-                    <span>${escapeHtml(source.filename || 'Unknown file')}</span>
-                </div>
-            `;
+            // Handle Enter key
+            this.messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.handleSubmit(e);
+                }
+            });
+        }
 
-            sourcesDiv.appendChild(sourceDiv);
+        // Search mode buttons
+        document.querySelectorAll('.search-mode-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const mode = e.target.dataset.mode;
+                if (mode) {
+                    this.setSearchMode(mode);
+                }
+            });
+        });
+    }
+
+    async handleSubmit(e) {
+        e.preventDefault();
+
+        if (this.isProcessing) {
+            console.log('Already processing a message');
+            return;
+        }
+
+        const query = this.messageInput.value.trim();
+        if (!query) {
+            return;
+        }
+
+        this.isProcessing = true;
+        this.updateSendButton(true);
+
+        try {
+            // Add user message to chat
+            this.addMessage('user', query);
+
+            // Clear input
+            this.messageInput.value = '';
+            this.autoResizeTextarea();
+
+            // Send to appropriate endpoint based on mode
+            let response;
+            if (this.currentSearchMode === 'rag') {
+                response = await this.sendRAGQuery(query);
+            } else {
+                response = await this.sendSearchQuery(query);
+            }
+
+            // Add response to chat
+            this.handleResponse(response);
+
+        } catch (error) {
+            console.error('Chat error:', error);
+            this.addMessage('error', 'Sorry, I encountered an error processing your request: ' + error.message);
+
+            if (window.showStatus) {
+                window.showStatus('Failed to process message: ' + error.message, 'error');
+            }
+        } finally {
+            this.isProcessing = false;
+            this.updateSendButton(false);
+        }
+    }
+
+    async sendRAGQuery(query) {
+        console.log('Sending RAG query:', query);
+
+        const requestData = {
+            query: query,
+            max_results: 5,
+            model: "llama3.2:latest",
+            similarity_threshold: 0.3,
+            include_context: true
+        };
+
+        const response = await fetch(`${this.apiBaseUrl}/search/rag`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(requestData)
         });
 
-        return sourcesDiv;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`RAG query failed: ${response.statusText} - ${errorData.detail || ''}`);
+        }
+
+        return await response.json();
+    }
+
+    async sendSearchQuery(query) {
+        console.log('Sending search query:', query);
+
+        const requestData = {
+            query: query,
+            n_results: 10,
+            similarity_threshold: 0.3
+        };
+
+        const response = await fetch(`${this.apiBaseUrl}/search/search`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Search query failed: ${response.statusText} - ${errorData.detail || ''}`);
+        }
+
+        return await response.json();
+    }
+
+    handleResponse(response) {
+        console.log('Handling response:', response);
+
+        if (this.currentSearchMode === 'rag') {
+            this.handleRAGResponse(response);
+        } else {
+            this.handleSearchResponse(response);
+        }
+    }
+
+    handleRAGResponse(response) {
+        if (response.success === false) {
+            this.addMessage('error', response.message || 'RAG query failed');
+            return;
+        }
+
+        const answer = response.answer || 'No answer generated';
+        const sources = response.sources || [];
+
+        // Add the AI response
+        this.addMessage('assistant', answer, {
+            sources: sources,
+            query: response.query,
+            model: response.model_used,
+            responseTime: response.response_time,
+            totalSources: response.total_sources
+        });
+    }
+
+    handleSearchResponse(response) {
+        if (response.success === false) {
+            this.addMessage('error', response.message || 'Search query failed');
+            return;
+        }
+
+        const results = response.results || [];
+        const total = response.total || 0;
+
+        if (results.length === 0) {
+            this.addMessage('assistant', 'No documents found matching your search query.');
+            return;
+        }
+
+        // Format search results
+        const searchSummary = `Found ${total} result${total !== 1 ? 's' : ''} for your search:`;
+
+        this.addMessage('search-results', searchSummary, {
+            results: results,
+            query: response.query,
+            total: total,
+            parameters: response.parameters
+        });
+    }
+
+    addMessage(type, content, metadata = {}) {
+        if (!this.chatContainer) return;
+
+        const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const timestamp = new Date();
+
+        const messageData = {
+            id: messageId,
+            type: type,
+            content: content,
+            metadata: metadata,
+            timestamp: timestamp
+        };
+
+        // Add to history
+        this.messageHistory.push(messageData);
+
+        // Create message element
+        const messageElement = this.createMessageElement(messageData);
+
+        // Add to container
+        this.chatContainer.appendChild(messageElement);
+
+        // Scroll to bottom
+        this.scrollToBottom();
+
+        // Save to localStorage
+        this.saveMessageHistory();
+    }
+
+    createMessageElement(messageData) {
+        const { id, type, content, metadata, timestamp } = messageData;
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${type}`;
+        messageDiv.id = id;
+
+        let messageHTML = '';
+
+        switch (type) {
+            case 'user':
+                messageHTML = this.createUserMessage(content, timestamp);
+                break;
+            case 'assistant':
+                messageHTML = this.createAssistantMessage(content, metadata, timestamp);
+                break;
+            case 'search-results':
+                messageHTML = this.createSearchResultsMessage(content, metadata, timestamp);
+                break;
+            case 'error':
+                messageHTML = this.createErrorMessage(content, timestamp);
+                break;
+            default:
+                messageHTML = this.createGenericMessage(content, timestamp);
+        }
+
+        messageDiv.innerHTML = messageHTML;
+        return messageDiv;
+    }
+
+    createUserMessage(content, timestamp) {
+        return `
+            <div class="message-content user-message">
+                <div class="message-header">
+                    <span class="message-sender">You</span>
+                    <span class="message-time">${this.formatTime(timestamp)}</span>
+                </div>
+                <div class="message-text">${this.escapeHtml(content)}</div>
+            </div>
+        `;
+    }
+
+    createAssistantMessage(content, metadata, timestamp) {
+        const sources = metadata.sources || [];
+        const sourcesHTML = sources.length > 0 ? this.createSourcesHTML(sources) : '';
+
+        return `
+            <div class="message-content assistant-message">
+                <div class="message-header">
+                    <span class="message-sender">
+                        <i class="fas fa-robot"></i> RAG Assistant
+                    </span>
+                    <span class="message-time">${this.formatTime(timestamp)}</span>
+                    ${metadata.model ? `<span class="message-model">${metadata.model}</span>` : ''}
+                </div>
+                <div class="message-text">${this.formatMessageContent(content)}</div>
+                ${sourcesHTML}
+                ${metadata.responseTime ? `<div class="message-meta">Response time: ${(metadata.responseTime * 1000).toFixed(0)}ms</div>` : ''}
+            </div>
+        `;
+    }
+
+    createSearchResultsMessage(content, metadata, timestamp) {
+        const results = metadata.results || [];
+        const resultsHTML = this.createSearchResultsHTML(results);
+
+        return `
+            <div class="message-content search-message">
+                <div class="message-header">
+                    <span class="message-sender">
+                        <i class="fas fa-search"></i> Search Results
+                    </span>
+                    <span class="message-time">${this.formatTime(timestamp)}</span>
+                </div>
+                <div class="message-text">${this.escapeHtml(content)}</div>
+                ${resultsHTML}
+            </div>
+        `;
+    }
+
+    createErrorMessage(content, timestamp) {
+        return `
+            <div class="message-content error-message">
+                <div class="message-header">
+                    <span class="message-sender">
+                        <i class="fas fa-exclamation-triangle"></i> Error
+                    </span>
+                    <span class="message-time">${this.formatTime(timestamp)}</span>
+                </div>
+                <div class="message-text">${this.escapeHtml(content)}</div>
+            </div>
+        `;
+    }
+
+    createSourcesHTML(sources) {
+        if (!sources || sources.length === 0) return '';
+
+        const sourcesItems = sources.map((source, index) => {
+            const filename = source.filename || 'Unknown Document';
+            const similarity = source.similarity_score || 0;
+            const documentId = source.document_id || source.pdf_id;
+
+            return `
+                <div class="source-item" onclick="window.documentManager?.openDocumentViewer('${documentId}')">
+                    <div class="source-header">
+                        <span class="source-filename">
+                            <i class="fas fa-file"></i> ${this.escapeHtml(filename)}
+                        </span>
+                        <span class="source-similarity">${(similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    ${source.page_number ? `<div class="source-page">Page ${source.page_number}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="message-sources">
+                <div class="sources-header">
+                    <i class="fas fa-link"></i> Sources (${sources.length})
+                </div>
+                <div class="sources-list">
+                    ${sourcesItems}
+                </div>
+            </div>
+        `;
+    }
+
+    createSearchResultsHTML(results) {
+        if (!results || results.length === 0) return '';
+
+        const resultsItems = results.map((result, index) => {
+            const filename = result.filename || 'Unknown Document';
+            const content = result.content || '';
+            const similarity = result.similarity_score || 0;
+            const documentId = result.document_id || result.pdf_id;
+
+            // Truncate content for display
+            const truncatedContent = content.length > 200 ?
+                content.substring(0, 200) + '...' : content;
+
+            return `
+                <div class="search-result-item" onclick="window.documentManager?.openDocumentViewer('${documentId}')">
+                    <div class="result-header">
+                        <span class="result-filename">
+                            <i class="fas fa-file"></i> ${this.escapeHtml(filename)}
+                        </span>
+                        <span class="result-similarity">${(similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="result-content">${this.escapeHtml(truncatedContent)}</div>
+                    ${result.page_number ? `<div class="result-page">Page ${result.page_number}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="search-results-container">
+                ${resultsItems}
+            </div>
+        `;
+    }
+
+    setSearchMode(mode) {
+        this.currentSearchMode = mode;
+
+        // Update UI
+        document.querySelectorAll('.search-mode-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        const activeBtn = document.querySelector(`[data-mode="${mode}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
+
+        // Update placeholder
+        if (this.messageInput) {
+            if (mode === 'rag') {
+                this.messageInput.placeholder = 'Ask a question about your documents...';
+            } else {
+                this.messageInput.placeholder = 'Search for content in your documents...';
+            }
+        }
+
+        // Save to localStorage
+        localStorage.setItem('rag_search_mode', mode);
+
+        console.log('Search mode set to:', mode);
+    }
+
+    updateSendButton(isProcessing) {
+        if (!this.sendButton) return;
+
+        this.sendButton.disabled = isProcessing;
+
+        const icon = this.sendButton.querySelector('i');
+        if (icon) {
+            if (isProcessing) {
+                icon.className = 'fas fa-spinner fa-spin';
+            } else {
+                icon.className = 'fas fa-paper-plane';
+            }         }
+    }
+
+    autoResizeTextarea() {
+        if (!this.messageInput) return;
+
+        this.messageInput.style.height = 'auto';
+        const newHeight = Math.min(this.messageInput.scrollHeight, 120);
+        this.messageInput.style.height = newHeight + 'px';
+    }
+
+    scrollToBottom() {
+        if (this.chatContainer) {
+            this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+        }
     }
 
     formatMessageContent(content) {
@@ -105,13 +479,13 @@ class ChatManager {
 
         try {
             // Basic markdown-like formatting
-            let formatted = escapeHtml(String(content))
+            let formatted = this.escapeHtml(String(content))
                 // Bold text
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 // Italic text
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 // Code blocks
-                .replace(/([\s\S]*?)/g, '<pre><code>$1</code></pre>')
+                .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
                 // Inline code
                 .replace(/`(.*?)`/g, '<code>$1</code>')
                 // Line breaks
@@ -124,139 +498,66 @@ class ChatManager {
             return formatted;
         } catch (error) {
             console.error('Error formatting message content:', error);
-            return escapeHtml(String(content));
+            return this.escapeHtml(String(content));
         }
     }
 
-    truncateText(text, maxLength) {
+    formatTime(timestamp) {
+        try {
+            return new Date(timestamp).toLocaleTimeString();
+        } catch (error) {
+            return new Date().toLocaleTimeString();
+        }
+    }
+
+    escapeHtml(text) {
         if (!text) return '';
-        const textStr = String(text);
-        if (textStr.length <= maxLength) return escapeHtml(textStr);
-        return escapeHtml(textStr.substring(0, maxLength)) + '...';
-    }
-
-    showTypingIndicator() {
-        if (!chatContainer) return null;
-
         try {
-            const typingId = 'typing-' + Date.now();
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'chat-message assistant-message';
-            messageDiv.id = typingId;
-
-            const typingDiv = document.createElement('div');
-            typingDiv.className = 'typing-indicator';
-            typingDiv.innerHTML = `
-                <div class="loading-dots">
-                    <div class="loading-dot"></div>
-                    <div class="loading-dot"></div>
-                    <div class="loading-dot"></div>
-                </div>
-                <span>Assistant is typing...</span>
-            `;
-
-            messageDiv.appendChild(typingDiv);
-            chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            this.typingIndicators.set(typingId, messageDiv);
-            return typingId;
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
         } catch (error) {
-            console.error('Error showing typing indicator:', error);
-            return null;
-        }
-    }
-
-    removeTypingIndicator(typingId) {
-        try {
-            if (typingId && this.typingIndicators.has(typingId)) {
-                const element = this.typingIndicators.get(typingId);
-                if (element && element.parentNode) {
-                    element.parentNode.removeChild(element);
-                }
-                this.typingIndicators.delete(typingId);
-            } else {
-                // Remove any typing indicators if no specific ID provided
-                this.typingIndicators.forEach((element, id) => {
-                    if (element && element.parentNode) {
-                        element.parentNode.removeChild(element);
-                    }
-                });
-                this.typingIndicators.clear();
-            }
-        } catch (error) {
-            console.error('Error removing typing indicator:', error);
+            console.error('Error escaping HTML:', error);
+            return String(text);
         }
     }
 
     clearChat() {
-        if (!chatContainer) return;
+        if (this.chatContainer) {
+            this.chatContainer.innerHTML = '';
+            this.messageHistory = [];
+            this.saveMessageHistory();
 
-        try {
-            // Clear messages array
-            this.messages = [];
-
-            // Clear DOM
-            chatContainer.innerHTML = `
-                <div class="welcome-message">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">
-                                <i class="fas fa-info-circle"></i> Welcome to RAG Document Search!
-                            </h3>
-                        </div>
-                        <div class="card-body">
-                            <p>You can:</p>
-                            <ul>
-                                <li>Upload PDF, DOC, DOCX, or TXT documents</li>
-                                <li>Ask questions about your documents using AI</li>
-                                <li>Search for specific content across all documents</li>
-                                <li>Get AI-powered answers with source citations</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // Clear typing indicators
-            this.typingIndicators.clear();
-
-            // Show success message
-            showStatus('Chat cleared successfully', 'success');
-        } catch (error) {
-            console.error('Error clearing chat:', error);
-        }
-    }
-
-    openSourceDocument(source) {
-        try {
-            if (source.document_id && typeof openDocumentViewer === 'function') {
-                openDocumentViewer(source.document_id, source.content);
-            } else {
-                showStatus('Document viewer not available', 'warning');
+            if (window.showStatus) {
+                window.showStatus('Chat cleared', 'success');
             }
-        } catch (error) {
-            console.error('Error opening source document:', error);
-            showStatus('Failed to open document', 'error');
         }
     }
 
-    loadChatHistory() {
+    saveMessageHistory() {
+        try {
+            const historyToSave = this.messageHistory.slice(-50); // Keep last 50 messages
+            localStorage.setItem('rag_chat_history', JSON.stringify(historyToSave));
+        } catch (error) {
+            console.warn('Failed to save chat history:', error);
+        }
+    }
+
+    loadMessageHistory() {
         try {
             const savedHistory = localStorage.getItem('rag_chat_history');
             if (savedHistory) {
-                const messages = JSON.parse(savedHistory);
+                const history = JSON.parse(savedHistory);
+                this.messageHistory = history;
 
-                if (Array.isArray(messages) && messages.length > 0) {
-                    // Clear welcome message
-                    if (chatContainer) {
-                        chatContainer.innerHTML = '';
-                    }
-
-                    // Restore messages
-                    messages.forEach(msg => {
-                        this.addMessage(msg.content, msg.sender, msg.sources);
+                // Recreate messages in DOM
+                if (this.chatContainer) {
+                    this.chatContainer.innerHTML = '';
+                    history.forEach(messageData => {
+                        const messageElement = this.createMessageElement(messageData);
+                        this.chatContainer.appendChild(messageElement);
                     });
+                    this.scrollToBottom();
                 }
             }
         } catch (error) {
@@ -264,129 +565,32 @@ class ChatManager {
         }
     }
 
-    saveChatHistory() {
-        try {
-            const historyToSave = this.messages.slice(-50); // Save last 50 messages
-            localStorage.setItem('rag_chat_history', JSON.stringify(historyToSave));
-        } catch (error) {
-            console.warn('Failed to save chat history:', error);
-        }
+    // Public API methods
+    getSearchMode() {
+        return this.currentSearchMode;
     }
 
-    setupAutoSave() {
-        // Auto-save chat periodically
-        setInterval(() => {
-            this.saveChatHistory();
-        }, 30000); // Every 30 seconds
-
-        // Save chat when page is unloaded
-        window.addEventListener('beforeunload', () => {
-            this.saveChatHistory();
-        });
+    getMessageHistory() {
+        return this.messageHistory;
     }
 
-    exportChat() {
-        try {
-            const chatData = {
-                messages: this.messages,
-                exportDate: new Date().toISOString(),
-                totalMessages: this.messages.length
-            };
-
-            const blob = new Blob([JSON.stringify(chatData, null, 2)], {
-                type: 'application/json'
-            });
-
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `rag-chat-export-${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            showStatus('Chat exported successfully', 'success');
-        } catch (error) {
-            console.error('Error exporting chat:', error);
-            showStatus('Failed to export chat', 'error');
-        }
-    }
-
-    importChat(file) {
-        try {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const chatData = JSON.parse(e.target.result);
-
-                    if (chatData.messages && Array.isArray(chatData.messages)) {
-                        // Clear current chat
-                        this.clearChat();
-
-                        // Import messages
-                        chatData.messages.forEach(msg => {
-                            this.addMessage(msg.content, msg.sender, msg.sources);
-                        });
-
-                        showStatus(`Imported ${chatData.messages.length} messages`, 'success');
-                    } else {
-                        throw new Error('Invalid chat file format');
-                    }
-                } catch (parseError) {
-                    console.error('Error parsing chat file:', parseError);
-                    showStatus('Invalid chat file format', 'error');
-                }
-            };
-
-            reader.readAsText(file);
-        } catch (error) {
-            console.error('Error importing chat:', error);
-            showStatus('Failed to import chat', 'error');
-        }
-    }
-
-    getMessageStats() {
-        const userMessages = this.messages.filter(m => m.sender === 'user');
-        const assistantMessages = this.messages.filter(m => m.sender === 'assistant');
-        const messagesWithSources = this.messages.filter(m => m.sources && m.sources.length > 0);
-
-        return {
-            total: this.messages.length,
-            user: userMessages.length,
-            assistant: assistantMessages.length,
-            withSources: messagesWithSources.length,
-            averageSourcesPerMessage: messagesWithSources.length > 0
-                ? messagesWithSources.reduce((sum, m) => sum + m.sources.length, 0) / messagesWithSources.length
-                : 0
-        };
+    isProcessingMessage() {
+        return this.isProcessing;
     }
 }
 
-// Input handling functions
-function handleChatKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if (chatForm) {
-            chatForm.dispatchEvent(new Event('submit'));
-        }
+// Initialize chat manager when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof API_BASE_URL !== 'undefined') {
+        window.chatManager = new ChatManager(API_BASE_URL);
+        console.log('Chat manager created and registered');
+    } else {
+        console.error('API_BASE_URL not defined, cannot initialize chat manager');
     }
+});
+
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = ChatManager;
 }
 
-function autoResizeTextarea() {
-    if (messageInput) {
-        messageInput.style.height = 'auto';
-        messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
-    }
-}
-
-// Initialize chat manager
-const chatManager = new ChatManager();
-
-// Global functions for backward compatibility
-window.addMessage = (content, sender, sources) => chatManager.addMessage(content, sender, sources);
-window.showTypingIndicator = () => chatManager.showTypingIndicator();
-window.removeTypingIndicator = (id) => chatManager.removeTypingIndicator(id);
-window.clearChat = () => chatManager.clearChat();
-
-console.log('Chat manager loaded successfully');

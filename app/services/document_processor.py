@@ -1,6 +1,9 @@
 import os
 import logging
 import hashlib
+import subprocess
+import tempfile
+from pathlib import Path
 import mimetypes
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
@@ -117,6 +120,203 @@ class DocumentProcessor:
 
         return None
 
+    def can_convert_to_pdf(self, file_type: str) -> bool:
+        """Check if file type can be converted to PDF"""
+        convertible_types = ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'txt', 'rtf']
+        return file_type.lower() in convertible_types
+
+    def convert_to_pdf_for_viewing(self, file_path: str, output_dir: str = None) -> str:
+        """Convert document to PDF for viewing purposes only"""
+        try:
+            file_type = self.get_file_type(file_path)
+
+            if not self.can_convert_to_pdf(file_type):
+                raise ValueError(f"Cannot convert {file_type} to PDF")
+
+            # Create output directory if not specified
+            if output_dir is None:
+                output_dir = os.path.join(os.path.dirname(file_path), 'temp_pdfs')
+
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Generate PDF filename
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            pdf_filename = f"{base_name}_view.pdf"
+            pdf_path = os.path.join(output_dir, pdf_filename)
+
+            # Check if PDF already exists and is newer than source
+            if os.path.exists(pdf_path):
+                source_mtime = os.path.getmtime(file_path)
+                pdf_mtime = os.path.getmtime(pdf_path)
+                if pdf_mtime > source_mtime:
+                    logger.info(f"Using existing PDF: {pdf_path}")
+                    return pdf_path
+
+            logger.info(f"Converting {file_type} to PDF: {file_path} -> {pdf_path}")
+
+            if file_type.lower() in ['docx', 'doc']:
+                success = self._convert_word_to_pdf(file_path, pdf_path)
+            elif file_type.lower() in ['xlsx', 'xls']:
+                success = self._convert_excel_to_pdf(file_path, pdf_path)
+            elif file_type.lower() in ['pptx', 'ppt']:
+                success = self._convert_powerpoint_to_pdf(file_path, pdf_path)
+            elif file_type.lower() == 'txt':
+                success = self._convert_text_to_pdf(file_path, pdf_path)
+            else:
+                raise ValueError(f"No converter available for {file_type}")
+
+            if success and os.path.exists(pdf_path):
+                logger.info(f"Successfully converted to PDF: {pdf_path}")
+                return pdf_path
+            else:
+                raise Exception("PDF conversion failed")
+
+        except Exception as e:
+            logger.error(f"Error converting {file_path} to PDF: {e}")
+            raise
+
+    def _convert_word_to_pdf(self, input_path: str, output_path: str) -> bool:
+        """Convert Word document to PDF"""
+        try:
+            # Method 1: Try using docx2pdf (works on Windows with Word installed)
+            try:
+                from docx2pdf import convert
+                convert(input_path, output_path)
+                return os.path.exists(output_path)
+            except ImportError:
+                logger.warning("docx2pdf not available, trying alternative method")
+            except Exception as e:
+                logger.warning(f"docx2pdf failed: {e}, trying alternative method")
+
+            # Method 2: Try using LibreOffice (cross-platform)
+            try:
+                result = subprocess.run([
+                    'libreoffice', '--headless', '--convert-to', 'pdf',
+                    '--outdir', os.path.dirname(output_path), input_path
+                ], capture_output=True, text=True, timeout=60)
+
+                if result.returncode == 0:
+                    # LibreOffice creates PDF with same name as input
+                    base_name = os.path.splitext(os.path.basename(input_path))[0]
+                    libreoffice_pdf = os.path.join(os.path.dirname(output_path), f"{base_name}.pdf")
+
+                    if os.path.exists(libreoffice_pdf):
+                        if libreoffice_pdf != output_path:
+                            os.rename(libreoffice_pdf, output_path)
+                        return True
+
+            except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                logger.warning(f"LibreOffice conversion failed: {e}")
+
+            # Method 3: Create PDF from extracted text (fallback)
+            return self._create_pdf_from_text(input_path, output_path)
+
+        except Exception as e:
+            logger.error(f"Word to PDF conversion failed: {e}")
+            return False
+
+    def _convert_excel_to_pdf(self, input_path: str, output_path: str) -> bool:
+        """Convert Excel document to PDF"""
+        try:
+            # Try LibreOffice first
+            try:
+                result = subprocess.run([
+                    'libreoffice', '--headless', '--convert-to', 'pdf',
+                    '--outdir', os.path.dirname(output_path), input_path
+                ], capture_output=True, text=True, timeout=60)
+
+                if result.returncode == 0:
+                    base_name = os.path.splitext(os.path.basename(input_path))[0]
+                    libreoffice_pdf = os.path.join(os.path.dirname(output_path), f"{base_name}.pdf")
+
+                    if os.path.exists(libreoffice_pdf):
+                        if libreoffice_pdf != output_path:
+                            os.rename(libreoffice_pdf, output_path)
+                        return True
+
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                logger.warning("LibreOffice not available for Excel conversion")
+
+            # Fallback: Create PDF from extracted text
+            return self._create_pdf_from_text(input_path, output_path)
+
+        except Exception as e:
+            logger.error(f"Excel to PDF conversion failed: {e}")
+            return False
+
+    def _convert_text_to_pdf(self, input_path: str, output_path: str) -> bool:
+        """Convert text file to PDF"""
+        return self._create_pdf_from_text(input_path, output_path)
+
+    def _create_pdf_from_text(self, input_path: str, output_path: str) -> bool:
+        """Create PDF from text content using reportlab"""
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+
+            # Extract text from the document
+            file_type = self.get_file_type(input_path)
+            processor = self.supported_types.get(file_type)
+
+            if not processor:
+                raise ValueError(f"No processor for {file_type}")
+
+            text, metadata = processor(input_path)
+
+            if not text:
+                raise ValueError("No text content to convert")
+
+            # Create PDF
+            doc = SimpleDocTemplate(output_path, pagesize=A4)
+            styles = getSampleStyleSheet()
+
+            # Custom style for body text
+            body_style = ParagraphStyle(
+                'CustomBody',
+                parent=styles['Normal'],
+                fontSize=10,
+                spaceAfter=12,
+                leftIndent=0.5 * inch,
+                rightIndent=0.5 * inch
+            )
+
+            story = []
+
+            # Add title
+            title = metadata.get('title') or os.path.splitext(os.path.basename(input_path))[0]
+            story.append(Paragraph(title, styles['Title']))
+            story.append(Spacer(1, 12))
+
+            # Add metadata if available
+            if metadata.get('author'):
+                story.append(Paragraph(f"Author: {metadata['author']}", styles['Normal']))
+            if metadata.get('subject'):
+                story.append(Paragraph(f"Subject: {metadata['subject']}", styles['Normal']))
+
+            story.append(Spacer(1, 20))
+
+            # Add content
+            paragraphs = text.split('\n\n')
+            for para in paragraphs:
+                if para.strip():
+                    # Escape HTML characters and handle line breaks
+                    para = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    para = para.replace('\n', '<br/>')
+                    story.append(Paragraph(para, body_style))
+                    story.append(Spacer(1, 6))
+
+            doc.build(story)
+            return os.path.exists(output_path)
+
+        except ImportError:
+            logger.error("reportlab not installed. Install with: pip install reportlab")
+            return False
+        except Exception as e:
+            logger.error(f"Text to PDF conversion failed: {e}")
+            return False
+
     def process_document(
             self,
             file_path: str,
@@ -194,7 +394,7 @@ class DocumentProcessor:
                 "original_name_only": original_name_only,
                 "final_filename": os.path.basename(new_file_path),
                 "final_name_only": self.get_original_filename(new_file_path),
-                "file_path": new_file_path,
+                "file_path": new_file_path,  # This is the key - return the new file path
                 "file_type": file_type,
                 "file_size": os.path.getsize(new_file_path),
                 "file_hash": self.calculate_file_hash(new_file_path),

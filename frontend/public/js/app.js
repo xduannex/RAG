@@ -922,17 +922,66 @@ function clearChat() {
 }
 
 // Document viewer functionality
-function openDocumentViewer(docId) {
+function openDocumentViewer(docIdOrSource) {
     try {
+        console.log('openDocumentViewer called with:', docIdOrSource);
+
+        // Handle both source objects and direct document IDs
+        let docId, docTitle;
+
+        if (typeof docIdOrSource === 'object' && docIdOrSource !== null) {
+            // It's a source object from search results
+            console.log('Processing source object:', docIdOrSource);
+
+            // Try multiple possible field names for document ID
+            docId = docIdOrSource.document_id ||
+                   docIdOrSource.id ||
+                   docIdOrSource.doc_id ||
+                   docIdOrSource.file_id ||
+                   docIdOrSource.pdf_id;
+
+            docTitle = docIdOrSource.title ||
+                      docIdOrSource.filename ||
+                      docIdOrSource.original_filename ||
+                      docIdOrSource.name ||
+                      'Document';
+
+            console.log('Extracted docId:', docId, 'docTitle:', docTitle);
+        } else {
+            // It's a direct document ID
+            docId = docIdOrSource;
+            docTitle = 'Document';
+            console.log('Using direct docId:', docId);
+        }
+
+        if (!docId) {
+            console.error('No document ID found in:', docIdOrSource);
+            showStatus('Cannot open document: No document ID found', 'error');
+            return;
+        }
+
+        // Convert to string and validate
+        docId = String(docId);
+        if (docId === 'undefined' || docId === 'null' || docId === '') {
+            console.error('Invalid document ID:', docId);
+            showStatus('Cannot open document: Invalid document ID', 'error');
+            return;
+        }
+
+        console.log('Opening document viewer for ID:', docId);
+
         // Use document manager if available
         if (window.documentManager && typeof window.documentManager.openDocumentViewer === 'function') {
+            console.log('Using document manager');
             window.documentManager.openDocumentViewer(docId);
             return;
         }
 
         // Fallback implementation
+        console.log('Using fallback document viewer');
         const modal = document.getElementById('documentViewerModal');
         if (!modal) {
+            console.error('Document viewer modal not found');
             showStatus('Document viewer not available', 'error');
             return;
         }
@@ -940,7 +989,7 @@ function openDocumentViewer(docId) {
         const modalTitle = modal.querySelector('.modal-title');
         const modalBody = modal.querySelector('.modal-body');
 
-        if (modalTitle) modalTitle.textContent = 'Document Viewer';
+        if (modalTitle) modalTitle.textContent = `Viewing: ${docTitle}`;
         if (modalBody) modalBody.innerHTML = '<div class="loading"><div class="loading-spinner"></div> Loading document...</div>';
 
         modal.style.display = 'flex';
@@ -949,51 +998,83 @@ function openDocumentViewer(docId) {
         loadDocumentContent(docId, modalBody);
     } catch (error) {
         console.error('Error opening document viewer:', error);
-        showStatus('Failed to open document viewer', 'error');
+        showStatus('Failed to open document viewer: ' + error.message, 'error');
     }
 }
 
 async function loadDocumentContent(docId, container) {
     if (!container) return;
 
+    console.log('Loading document content for ID:', docId);
+
     try {
-        const response = await fetch(`${API_BASE_URL}/pdf/${docId}/chunks`, {
+        // Validate and convert docId to integer
+        const documentId = parseInt(docId, 10);
+        if (isNaN(documentId) || documentId <= 0) {
+            throw new Error(`Invalid document ID: "${docId}" cannot be converted to a positive integer`);
+        }
+
+        console.log(`Attempting to fetch: ${API_BASE_URL}/api/documents/${documentId}/view`);
+
+        const response = await fetch(`${API_BASE_URL}/api/documents/${documentId}/view`, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
             }
         });
 
+        console.log('Response status:', response.status);
+
         if (!response.ok) {
-            throw new Error(`Failed to load document content: ${response.statusText}`);
+            let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                console.error('Error response data:', errorData);
+                if (errorData.detail) {
+                    errorDetail += ` - ${errorData.detail}`;
+                }
+            } catch (jsonError) {
+                const textError = await response.text();
+                console.error('Error response text:', textError);
+                if (textError) {
+                    errorDetail += ` - ${textError}`;
+                }
+            }
+            throw new Error(errorDetail);
         }
 
         const data = await response.json();
-
-        // Handle different possible response structures
-        let content = '';
-        if (typeof data === 'string') {
-            content = data;
-        } else if (data.content) {
-            content = data.content;
-        } else if (data.chunks && Array.isArray(data.chunks)) {
-            content = data.chunks.map(chunk => chunk.content || chunk.text || '').join('\n\n');
-        } else if (Array.isArray(data)) {
-            content = data.map(item => item.content || item.text || '').join('\n\n');
-        }
+        console.log('Document data received:', data);
 
         container.innerHTML = `
             <div class="document-content">
-                ${formatDocumentContent(content || 'No content available')}
+                <div class="document-header mb-3">
+                    <h5>${escapeHtml(data.title || data.filename || 'Document')}</h5>
+                    <div class="document-meta text-muted">
+                        <small>
+                            Type: ${(data.file_type || 'unknown').toUpperCase()} | 
+                            Words: ${(data.word_count || 0).toLocaleString()} | 
+                            Pages: ${data.total_pages || 0}
+                        </small>
+                    </div>
+                </div>
+                <div class="document-text">
+                    ${formatDocumentContent(data.content)}
+                </div>
             </div>
         `;
 
     } catch (error) {
         console.error('Failed to load document content:', error);
+        console.error('Original Document ID was:', docId);
+
         container.innerHTML = `
             <div class="text-center text-danger">
                 <i class="fas fa-exclamation-triangle"></i>
-                Failed to load document content: ${error.message}
+                <h5>Failed to load document content</h5>
+                <p><strong>Error:</strong> ${error.message}</p>
+                <p><strong>Document ID:</strong> ${docId}</p>
+                <small class="text-muted">Check the browser console for more details</small>
             </div>
         `;
     }

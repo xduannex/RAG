@@ -23,6 +23,9 @@ from app.services.document_processor import DocumentProcessor
 # Import your existing routes
 from app.api.routes import pdf, search, admin, health, bulk_upload, documents, pdfs
 
+if os.path.exists("uploads"):
+    app.mount("/storage/pdfs", StaticFiles(directory="uploads"), name="uploads")
+
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper()),
@@ -99,23 +102,40 @@ async def lifespan(app: FastAPI):
     try:
         from app.core.database import init_db, check_database_health
 
-        # Re-initialize database (recreate tables if needed)
-        logger.info("Re-initializing database...")
+        # Initialize database (DO NOT drop tables in production)
+        logger.info("Initializing database...")
 
-        # Drop and recreate all tables for fresh start
-        Base.metadata.drop_all(bind=engine)
-        Base.metadata.create_all(bind=engine)
+        # REMOVE THESE LINES - they drop all your data!
+        # Base.metadata.drop_all(bind=engine)
+        # Base.metadata.create_all(bind=engine)
 
+        # Instead, use proper database initialization
         init_success = init_db()
 
         if init_success:
             # Check health
             health = check_database_health()
             logger.info(f"Database health: {health}")
+
+            # Check if we have existing documents
+            try:
+                from app.models.database_models import Document
+                from app.core.database import get_db
+
+                # Get database session
+                db = next(get_db())
+                document_count = db.query(Document).count()
+                logger.info(f"Found {document_count} existing documents in database")
+                db.close()
+
+            except Exception as e:
+                logger.warning(f"Could not check existing documents: {e}")
+
         else:
             logger.error("Database initialization failed")
             raise Exception("Database initialization failed")
 
+        # Rest of your initialization code remains the same...
         # Initialize ChromaDB service
         logger.info("Initializing ChromaDB service...")
         chroma_service = ChromaService()
@@ -227,7 +247,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
+    # Shutdown code remains the same...
     logger.info("🛑 Shutting down services...")
 
     # Cleanup RAG service
