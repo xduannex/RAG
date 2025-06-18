@@ -1,0 +1,1113 @@
+/* Document viewer enhancements */
+.document-viewer {
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.document-info h3 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+}
+
+.document-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--border-radius);
+}
+
+.stat-item i {
+    opacity: 0.7;
+}
+
+.document-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-left: 1rem;
+}
+
+.document-search-container {
+    margin-bottom: 1rem;
+}
+
+.document-search {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+}
+
+.search-input-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.search-input-group .form-control {
+    flex: 1;
+}
+
+.search-results-info {
+    font-size: 0.875rem;
+}
+
+.search-results-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.search-results-summary.no-results {
+    color: var(--text-muted);
+}
+
+.search-highlight {
+    background-color: #ffeb3b;
+    color: #000;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-weight: 500;
+}
+
+.document-metadata-section {
+    margin-bottom: 1.5rem;
+}
+
+.metadata-details {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.metadata-details summary {
+    background: var(--bg-secondary);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+}
+
+.metadata-details summary:hover {
+    background: var(--bg-tertiary);
+}
+
+.metadata-details[open] summary {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.metadata-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.metadata-label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metadata-value {
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.document-chunks {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.document-chunk {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+.chunk-header {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chunk-header h4 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.125rem;
+}
+
+.chunk-meta {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.chunk-content {
+    padding: 1.5rem;
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+.chunk-content p {
+    margin: 0 0 1rem 0;
+}
+
+.chunk-content p:last-child {
+    margin-bottom: 0;
+}
+
+.paragraph-break {
+    height: 1rem;
+}
+
+.document-content {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+.document-content p {
+    margin: 0 0 1rem 0;
+}
+
+.document-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Document list enhancements */
+.document-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+}
+
+.list-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.list-stats {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.pdf-item {
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.pdf-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--box-shadow-lg);
+}
+
+.pdf-item.selected {
+    background: rgba(0, 123, 255, 0.1);
+    border-color: var(--primary-color);
+}
+
+.pdf-item.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--primary-color);
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+}
+
+.pdf-meta .meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.meta-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.meta-value {
+    color: var(--text-primary);
+    font-size: 0.8rem;
+}
+
+.pdf-actions {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.pdf-item:hover .pdf-actions {
+    opacity: 1;
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--border-radius);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-uploaded {
+    background: rgba(23, 162, 184, 0.1);
+    color: var(--info-color);
+    border: 1px solid rgba(23, 162, 184, 0.2);
+}
+
+.status-processing {
+    background: rgba(255, 193, 7, 0.1);
+    color: var(--warning-color);
+    border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.status-processed,
+.status-completed {
+    background: rgba(40, 167, 69, 0.1);
+    color: var(--success-color);
+    border: 1px solid rgba(40, 167, 69, 0.2);
+}
+
+.status-failed {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--danger-color);
+    border: 1px solid rgba(220, 53, 69, 0.2);
+}
+
+.status-unknown {
+    background: rgba(108, 117, 125, 0.1);
+    color: var(--secondary-color);
+    border: 1px solid rgba(108, 117, 125, 0.2);
+}
+
+/* Empty and error states */
+.empty-state,
+.error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.empty-icon,
+.error-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.error-icon {
+    color: var(--danger-color);
+}
+
+.empty-text,
+.error-text {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.empty-subtext,
+.error-subtext {
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+/* Modal enhancements for document viewer */
+.modal-large .modal-content {
+    max-width: 95vw;
+    max-height: 95vh;
+    width: 1200px;
+}
+
+.document-viewer .modal-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.document-viewer .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.document-viewer .modal-body .document-viewer {
+    padding: 1.5rem;
+}
+
+/* Format grid for help modal */
+.format-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.format-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    font-size: 0.875rem;
+}
+
+.doc-type-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+}
+
+.doc-type-item i {
+    font-size: 2rem;
+    margin-top: 0.25rem;
+}
+
+.doc-type-item strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+}
+
+.doc-type-item p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.shortcuts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.shortcut-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    font-size: 0.875rem;
+}
+
+.shortcut-item kbd {
+    margin-left: 0.5rem;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .document-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .document-actions {
+        margin-left: 0;
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .document-stats {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+
+    .metadata-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chunk-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .chunk-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    .document-list-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+
+    .list-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .pdf-actions {
+        opacity: 1;
+        margin-top: 0.5rem;
+        margin-left: 0;
+    }
+
+    .search-input-group {
+        flex-direction: column;
+    }
+
+    .format-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .shortcuts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-large .modal-content {
+        max-width: 95vw;
+        width: auto;
+        margin: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .document-actions {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .document-actions .btn {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .chunk-content,
+    .document-content {
+        padding: 1rem;
+    }
+
+    .document-viewer .modal-body .document-viewer {
+        padding: 1rem;
+    }
+}
+
+/* Print styles */
+@media print {
+    .document-actions,
+    .document-search-container,
+    .pdf-actions,
+    .list-controls {
+        display: none !important;
+    }
+
+    .document-chunk {
+        page-break-inside: avoid;
+        border: none;
+        box-shadow: none;
+    }
+
+    .chunk-header {
+        background: none;
+        border-bottom: 1px solid #000;
+    }
+
+    .document-content,
+    .chunk-content {
+        background: none;
+        border: none;
+    }
+
+    .search-highlight {
+        background: #ffeb3b !important;
+        -webkit-print-color-adjust: exact;
+        color-adjust: exact;
+    }
+}
+
+/* Dark theme adjustments */
+.theme-dark .search-highlight {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.theme-dark .metadata-details summary {
+    background: var(--bg-tertiary);
+}
+
+.theme-dark .metadata-details summary:hover {
+    background: var(--bg-secondary);
+}
+
+.theme-dark .chunk-header {
+    background: var(--bg-tertiary);
+}
+
+.theme-dark .document-list-header {
+    background: var(--bg-tertiary);
+}
+
+/* Loading overlay for document operations */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+}
+
+.loading-content {
+    background: var(--bg-primary);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    text-align: center;
+    box-shadow: var(--box-shadow-lg);
+    min-width: 200px;
+}
+
+.loading-spinner.large {
+    width: 3rem;
+    height: 3rem;
+    border-width: 4px;
+    margin-bottom: 1rem;
+}
+
+.loading-text {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.offline-indicator {
+    position: fixed;
+    top: 80px;
+    right: 1rem;
+    background: var(--warning-color);
+    color: #000;
+    padding: 0.75rem 1rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow-lg);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    animation: slideInRight 0.3s ease-out;
+}
+
+/* File type specific colors */
+.file-type-pdf { color: #dc3545; }
+.file-type-word { color: #2b579a; }
+.file-type-excel { color: #217346; }
+.file-type-powerpoint { color: #d24726; }
+.file-type-text { color: #6c757d; }
+.file-type-csv { color: #28a745; }
+.file-type-json { color: #ffc107; }
+.file-type-xml { color: #fd7e14; }
+.file-type-html { color: #e83e8c; }
+.file-type-image { color: #17a2b8; }
+
+/* Enhanced animations */
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.document-chunk,
+.pdf-item {
+    animation: fadeInScale 0.3s ease-out;
+}
+
+/* Accessibility improvements */
+.pdf-item:focus-within {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.document-search input:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .search-highlight {
+        background: #ffff00;
+        color: #000000;
+        border: 1px solid #000000;
+    }
+
+    .status-badge {
+        border-width: 2px;
+    }
+
+    .pdf-item.selected {
+        border-width: 3px;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .pdf-item,
+    .document-chunk,
+    .loading-spinner,
+    .offline-indicator {
+        animation: none;
+    }
+
+    .pdf-item:hover {
+        transform: none;
+    }
+
+    .loading-spinner {
+        border-top-color: var(--primary-color);
+    }
+}
+
+/* Custom scrollbar for document content */
+.document-content::-webkit-scrollbar,
+.chunk-content::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.document-content::-webkit-scrollbar-track,
+.chunk-content::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius);
+}
+
+.document-content::-webkit-scrollbar-thumb,
+.chunk-content::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+    background: var(--text-secondary);
+    border-radius: var(--border-radius);
+}
+
+.document-content::-webkit-scrollbar-thumb:hover,
+.chunk-content::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--text-primary);
+}
+
+/* Selection styles */
+::selection {
+    background: rgba(0, 123, 255, 0.3);
+    color: var(--text-primary);
+}
+
+.document-content ::selection,
+.chunk-content ::selection {
+    background: rgba(0, 123, 255, 0.2);
+}
+
+/* Tooltip styles for document actions */
+.pdf-actions .btn[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text-primary);
+    color: var(--bg-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--border-radius);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 0.25rem;
+}
+
+/* Document viewer modal specific styles */
+.document-viewer-modal .modal-content {
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.document-viewer-modal .modal-header {
+    flex-shrink: 0;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.document-viewer-modal .modal-body {
+    flex: 1;
+    overflow: hidden;
+    padding: 0;
+}
+
+.document-viewer-modal .document-viewer {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+}
+
+.document-viewer-modal .document-chunks,
+.document-viewer-modal .document-content {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Enhanced document list item styles */
+.pdf-item {
+    border-left: 4px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.pdf-item:hover {
+    border-left-color: var(--primary-color);
+}
+
+.pdf-item.selected {
+    border-left-color: var(--primary-color);
+    background: linear-gradient(90deg, rgba(0, 123, 255, 0.1) 0%, rgba(0, 123, 255, 0.05) 100%);
+}
+
+/* Document type indicators */
+.pdf-icon {
+    position: relative;
+}
+
+.pdf-icon::after {
+    content: attr(data-type);
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    background: var(--primary-color);
+    color: white;
+    font-size: 0.6rem;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.125rem;
+    text-transform: uppercase;
+    font-weight: bold;
+    line-height: 1;
+}
+
+/* Search result highlighting improvements */
+.search-highlight {
+    position: relative;
+    animation: highlightPulse 2s ease-in-out;
+}
+
+@keyframes highlightPulse {
+    0%, 100% {
+        background-color: #ffeb3b;
+        transform: scale(1);
+    }
+    50% {
+        background-color: #ffc107;
+        transform: scale(1.02);
+    }
+}
+
+/* Document processing status indicators */
+.pdf-item[data-status="processing"] {
+    position: relative;
+    overflow: hidden;
+}
+
+.pdf-item[data-status="processing"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+    animation: processingSlide 2s infinite;
+}
+
+@keyframes processingSlide {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Drag and drop visual feedback for document list */
+.pdf-list.drag-over {
+    background: rgba(0, 123, 255, 0.05);
+    border: 2px dashed var(--primary-color);
+    border-radius: var(--border-radius);
+}
+
+/* Enhanced modal animations */
+.modal.show {
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+.modal.show .modal-content {
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Document content formatting improvements */
+.document-content h1,
+.document-content h2,
+.document-content h3,
+.chunk-content h1,
+.chunk-content h2,
+.chunk-content h3 {
+    color: var(--primary-color);
+    margin: 1.5rem 0 1rem 0;
+    font-weight: 600;
+}
+
+.document-content h1:first-child,
+.chunk-content h1:first-child {
+    margin-top: 0;
+}
+
+.document-content blockquote,
+.chunk-content blockquote {
+    border-left: 4px solid var(--primary-color);
+    margin: 1rem 0;
+    padding: 0.5rem 0 0.5rem 1rem;
+    background: rgba(0, 123, 255, 0.05);
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    font-style: italic;
+}
+
+.document-content code,
+.chunk-content code {
+    background: var(--bg-secondary);
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    border: 1px solid var(--border-color);
+}
+
+.document-content pre,
+.chunk-content pre {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.document-content pre code,
+.chunk-content pre code {
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+/* Table formatting for document content */
+.document-content table,
+.chunk-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.document-content th,
+.document-content td,
+.chunk-content th,
+.chunk-content td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.document-content th,
+.chunk-content th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.document-content tr:last-child td,
+.chunk-content tr:last-child td {
+    border-bottom: none;
+}
+
+.document-content tr:nth-child(even),
+.chunk-content tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.theme-dark .document-content tr:nth-child(even),
+.theme-dark .chunk-content tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* List formatting */
+.document-content ul,
+.document-content ol,
+.chunk-content ul,
+.chunk-content ol {
+    margin: 1rem 0;
+    padding-left: 2rem;
+}
+
+.document-content li,
+.chunk-content li {
+    margin: 0.5rem 0;
+    line-height: 1.6;
+}
+
+/* Link styling */
+.document-content a,
+.chunk-content a {
+    color: var(--primary-color);
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.document-content a:hover,
+.chunk-content a:hover {
+    color: var(--primary-hover);
+}
+
+/* Image handling in document content */
+.document-content img,
+.chunk-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    margin: 1rem 0;
+}
+
+/* Final responsive adjustments */
+@media (max-width: 576px) {
+    .document-viewer-modal .modal-content {
+        height: 95vh;
+        margin: 0.5rem;
+    }
+
+    .document-viewer-modal .document-viewer {
+        padding: 1rem;
+    }
+
+    .document-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .metadata-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .chunk-header {
+        padding: 0.75rem;
+    }
+
+    .chunk-content,
+    .document-content {
+        padding: 1rem;
+        font-size: 0.9rem;
+    }
+}
+
