@@ -122,162 +122,6 @@ async def complete_document_processing(document_id: int, chunks: List[Dict], met
         if db:
             db.close()
 
-@router.post("/upload")
-async def upload_document(
-        background_tasks: BackgroundTasks,
-        file: UploadFile = File(...),
-        title: Optional[str] = Form(None),
-        category: Optional[str] = Form(None),
-        description: Optional[str] = Form(None),
-        auto_process: bool = Form(True),
-        db: Session = Depends(get_db)
-):
-    """Upload a document of any supported type"""
-
-    try:
-        # Validate file type
-        if not validate_file_type(file.filename):
-            raise HTTPException(
-                status_code=400,
-                detail=f"File type not supported. Supported types: {settings.allowed_file_types}"
-            )
-
-        # Read file content to check size
-        file_content = await file.read()
-        if not validate_file_size(len(file_content)):
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Maximum size: {settings.max_file_size} bytes"
-            )
-
-        # Reset file pointer
-        await file.seek(0)
-
-        # Create upload directory if it doesn't exist
-        upload_dir = "uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-
-        # Generate unique filename initially
-        import uuid
-        file_extension = file.filename.split('.')[-1].lower()
-        temp_filename = f"temp_{uuid.uuid4()}.{file_extension}"
-        temp_file_path = os.path.join(upload_dir, temp_filename)
-
-        # Save file temporarily
-        with open(temp_file_path, "wb") as buffer:
-            buffer.write(file_content)
-
-        logger.info(f"File saved temporarily: {temp_file_path}")
-
-        # Get file type
-        file_type = document_processor.get_file_type(temp_file_path)
-
-        # PRE-PROCESS the document to get the final filename
-        try:
-            # Get existing files for duplicate checking
-            existing_files = []
-            existing_docs = db.query(Document).all()
-            for doc in existing_docs:
-                existing_files.append({
-                    'id': doc.id,
-                    'filename': doc.filename,
-                    'original_filename': doc.original_filename,
-                    'file_hash': doc.file_hash
-                })
-
-            # Process document to get final filename and metadata
-            chunks, processing_metadata = document_processor.process_document(
-                temp_file_path,
-                chunk_size=1000,
-                chunk_overlap=200,
-                auto_rename_generic=True,
-                max_title_length=50,
-                existing_files=existing_files,
-                original_filename=file.filename,
-                check_duplicates=True
-            )
-
-            # Get the final file path after processing
-            final_file_path = processing_metadata.get('file_path', temp_file_path)
-            final_filename = os.path.basename(final_file_path)
-
-            logger.info(f"Document processed. Final filename: {final_filename}")
-            logger.info(f"Was renamed: {processing_metadata.get('was_renamed', False)}")
-
-        except Exception as e:
-            # If processing fails, clean up temp file and use original name
-            logger.error(f"Pre-processing failed: {e}")
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-            raise HTTPException(status_code=500, detail=f"Document processing failed: {str(e)}")
-
-        # Create database record with final filename
-        document = Document(
-            filename=final_filename,  # Use the final filename
-            original_filename=file.filename,  # Keep original for reference
-            file_path=final_file_path,  # Use final path
-            file_type=file_type,
-            file_size=len(file_content),
-            title=title or processing_metadata.get('extracted_title') or processing_metadata.get(
-                'final_name_only') or file.filename,
-            category=category,
-            description=description,
-            status="processing",  # Set to processing since we already processed
-            processing_status="processing",
-            # Add metadata from processing
-            file_hash=processing_metadata.get("file_hash"),
-            word_count=processing_metadata.get("word_count", 0),
-            char_count=processing_metadata.get("total_characters", 0),
-            total_chunks=processing_metadata.get("chunk_count", 0),
-            keywords=processing_metadata.get("keywords", []),
-            metadata=processing_metadata
-        )
-
-        # Extract additional metadata based on file type
-        if file_type == "pdf":
-            document.total_pages = processing_metadata.get("total_pages")
-            document.author = processing_metadata.get("author")
-            document.subject = processing_metadata.get("subject")
-            document.creator = processing_metadata.get("creator")
-        elif file_type in ["docx", "doc"]:
-            document.total_pages = processing_metadata.get("paragraph_count")
-            document.author = processing_metadata.get("author")
-            document.subject = processing_metadata.get("subject")
-
-        db.add(document)
-        db.commit()
-        db.refresh(document)
-
-        logger.info(f"Document record created with ID: {document.id}, filename: {final_filename}")
-
-        # Complete the processing in background (save chunks to DB and vector store)
-        if auto_process:
-            background_tasks.add_task(complete_document_processing, document.id, chunks, processing_metadata)
-
-        return {
-            "message": "Document uploaded and processed successfully",
-            "document_id": document.id,
-            "filename": file.filename,
-            "final_filename": final_filename,
-            "file_type": file_type,
-            "size": len(file_content),
-            "was_renamed": processing_metadata.get('was_renamed', False),
-            "extracted_title": processing_metadata.get('extracted_title'),
-            "auto_process": auto_process,
-            "chunks_created": len(chunks)
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Upload failed: {e}")
-        # Clean up any created files
-        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-        if 'final_file_path' in locals() and final_file_path != temp_file_path and os.path.exists(final_file_path):
-            os.remove(final_file_path)
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
 
 @router.get("/")
 async def list_documents(
@@ -1332,7 +1176,6 @@ async def view_document_as_pdf(document_id: int, db: Session = Depends(get_db)):
             )
 
         # Check if document type can be converted
-        document_processor = DocumentProcessor()
         if not document_processor.can_convert_to_pdf(document.file_type):
             raise HTTPException(
                 status_code=400,
@@ -1367,3 +1210,54 @@ async def view_document_as_pdf(document_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error serving document as PDF {document_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to serve document as PDF: {str(e)}")
+
+@router.get("/{document_id}/content")
+async def get_document_content(document_id: int, db: Session = Depends(get_db)):
+    """Get document content for viewing"""
+    try:
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Get chunks from database
+        chunks = db.query(DocumentChunk).filter(
+            DocumentChunk.document_id == document_id
+        ).order_by(DocumentChunk.chunk_index).all()
+
+        if not chunks:
+            raise HTTPException(status_code=404, detail="Document content not found")
+
+        # Format content
+        content = {
+            "document_id": document.id,
+            "filename": document.original_filename,
+            "title": document.title,
+            "file_type": document.file_type,
+            "total_chunks": len(chunks),
+            "content": "\n\n".join([chunk.content for chunk in chunks]),
+            "chunks": [
+                {
+                    "index": chunk.chunk_index,
+                    "content": chunk.content,
+                    "page_number": chunk.page_number,
+                    "word_count": chunk.word_count
+                }
+                for chunk in chunks
+            ],
+            "metadata": {
+                "file_size": document.file_size,
+                "word_count": document.word_count,
+                "total_pages": document.total_pages,
+                "category": document.category,
+                "author": document.author,
+                "created_at": document.created_at.isoformat() if document.created_at else None
+            }
+        }
+
+        return content
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting document content {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get document content: {str(e)}")

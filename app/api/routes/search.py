@@ -32,7 +32,7 @@ class RAGRequest(BaseModel):
     query: str
     n_results: Optional[int] = 5
     max_results: Optional[int] = 5  # Added for backward compatibility
-    model: Optional[str] = "llama3.2:latest"
+    model: Optional[str] = "qwen2.5:7b"
     pdf_ids: Optional[List[int]] = None
     document_ids: Optional[List[int]] = None  # Added for document IDs
     similarity_threshold: Optional[float] = 0.3
@@ -647,106 +647,4 @@ Answer:"""
         logger.error(f"RAG traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"RAG query failed: {str(e)}")
 
-@router.post("/debug/reindex")
-async def reindex_documents(request: Request, db: Session = Depends(get_db)):
-    """Re-index all documents from app.db to ChromaDB"""
-    try:
-        services = get_services(request)
-        chroma_service = services["chroma_service"]
 
-        if not chroma_service:
-            return {"error": "ChromaDB service not available"}
-
-        # Get all documents from app.db
-        from app.models.database_models import Document, DocumentChunk
-
-        documents = db.query(Document).all()
-
-        if not documents:
-            return {"message": "No documents found in database"}
-
-        reindexed_count = 0
-        errors = []
-
-        for doc in documents:
-            try:
-                # Get chunks for this document
-                chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
-
-                if chunks:
-                    # Prepare data for ChromaDB
-                    chunk_contents = []
-                    chunk_ids = []
-                    chunk_metadatas = []
-
-                    for chunk in chunks:
-                        chunk_contents.append(chunk.content)
-                        chunk_ids.append(f"doc_{doc.id}_chunk_{chunk.chunk_index}")
-                        chunk_metadatas.append({
-                            "document_id": doc.id,
-                            "chunk_index": chunk.chunk_index,
-                            "filename": doc.original_filename or doc.title or "unknown",
-                            "file_type": doc.file_type,
-                            "page_number": getattr(chunk, 'page_number', None)
-                        })
-
-                    # Add to ChromaDB
-                    await chroma_service.add_documents(
-                        documents=chunk_contents,
-                        metadatas=chunk_metadatas,
-                        ids=chunk_ids
-                    )
-
-                    reindexed_count += 1
-                    logger.info(f"Re-indexed document: {doc.original_filename} ({len(chunks)} chunks)")
-
-            except Exception as e:
-                error_msg = f"Error re-indexing {doc.original_filename}: {str(e)}"
-                errors.append(error_msg)
-                logger.error(error_msg)
-
-        return {
-            "success": True,
-            "message": f"Re-indexed {reindexed_count} documents",
-            "total_documents": len(documents),
-            "errors": errors
-        }
-
-    except Exception as e:
-        logger.error(f"Re-indexing failed: {e}")
-        return {"error": str(e), "traceback": traceback.format_exc()}
-
-
-@router.get("/debug/chroma")
-async def debug_chroma(request: Request):
-    """Debug ChromaDB contents"""
-    try:
-        services = get_services(request)
-        chroma_service = services["chroma_service"]
-
-        if not chroma_service:
-            return {"error": "ChromaDB service not available"}
-
-        # Get collection info
-        stats = chroma_service.get_collection_stats()
-
-        # Try a simple search with very low threshold
-        test_results = await chroma_service.search_documents(
-            query="dennis",
-            n_results=10,
-            similarity_threshold=0.0  # No threshold
-        )
-
-        return {
-            "collection_stats": stats,
-            "test_search_results": len(test_results),
-            "sample_results": test_results[:2] if test_results else [],
-            "debug_info": {
-                "chroma_service_available": chroma_service is not None,
-                "collection_initialized": hasattr(chroma_service,
-                                                  'collection') and chroma_service.collection is not None
-            }
-        }
-
-    except Exception as e:
-        return {"error": str(e), "traceback": traceback.format_exc()}

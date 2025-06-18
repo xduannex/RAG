@@ -21,7 +21,7 @@ from app.services.chroma_service import ChromaService, get_chroma_service
 from app.services.document_processor import DocumentProcessor
 
 # Import your existing routes
-from app.api.routes import pdf, search, admin, health, bulk_upload, documents, pdfs
+from app.api.routes import pdf, search, admin, health, documents, pdfs
 
 if os.path.exists("uploads"):
     app.mount("/storage/pdfs", StaticFiles(directory="uploads"), name="uploads")
@@ -371,7 +371,6 @@ app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(pdf.router, prefix="/pdf", tags=["PDFs"])
 app.include_router(search.router, prefix="/search", tags=["Search"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
-app.include_router(bulk_upload.router, prefix="/bulk", tags=["Bulk Upload"])
 app.include_router(pdfs.router, prefix="/api/pdfs", tags=["PDF Management"])
 
 # New universal documents route

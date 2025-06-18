@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -84,96 +84,115 @@
             transform: none;
         }
 
-        /* Search suggestions styling */
-        .search-suggestions {
-            position: absolute;
-            bottom: 100%;
-            left: 0;
-            right: 0;
-            background: var(--bg-color, #fff);
-            border: 1px solid var(--border-color, #e0e0e0);
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            max-height: 200px;
-            overflow-y: auto;
-            z-index: 1000;
-            margin-bottom: 8px;
+        /* Upload area improvements */
+        .upload-area {
+            position: relative;
+            transition: all 0.3s ease;
         }
 
-        .search-suggestion {
-            padding: 8px 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color, #e0e0e0);
-            transition: background-color 0.2s ease;
+        .upload-area.dragover {
+            border-color: var(--primary-color, #007bff);
+            background-color: rgba(0, 123, 255, 0.1);
+            transform: scale(1.02);
         }
 
-        .search-suggestion:last-child {
-            border-bottom: none;
+        .upload-progress {
+            margin-top: 1rem;
         }
 
-        .search-suggestion:hover,
-        .search-suggestion.active {
-            background: var(--hover-color, #f8f9fa);
+        .progress {
+            width: 100%;
+            height: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
         }
 
-        .search-suggestion i {
-            margin-right: 8px;
-            opacity: 0.6;
+        .progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s ease;
+            border-radius: 4px;
         }
 
-        .search-suggestion mark {
-            background: var(--highlight-color, #fff3cd);
-            padding: 1px 2px;
-            border-radius: 2px;
-        }
-
-        /* Advanced search panel */
-        .advanced-search-panel {
-            background: var(--bg-secondary, #f8f9fa);
-            border: 1px solid var(--border-color, #e0e0e0);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-        }
-
-        /* Search history */
-        .search-history {
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .search-history-item {
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--border-color, #e0e0e0);
-            cursor: pointer;
-            transition: background-color 0.2s ease;
-        }
-
-        .search-history-item:hover {
-            background: var(--hover-color, #f8f9fa);
-        }
-
-        .search-history-query {
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
-
-        .search-history-meta {
-            font-size: 12px;
+        /* Error and success states */
+        .error-state, .empty-state {
+            text-align: center;
+            padding: 2rem;
             color: var(--text-muted, #6c757d);
-            display: flex;
-            justify-content: space-between;
         }
 
-        /* Responsive adjustments */
+        .error-state .error-icon, .empty-state .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .error-state .error-icon {
+            color: var(--danger-color, #dc3545);
+        }
+
+        .empty-state .empty-icon {
+            color: var(--info-color, #17a2b8);
+        }
+
+        /* Document item improvements */
+        .document-item {
+            transition: all 0.2s ease;
+        }
+
+        .document-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .document-item.selected {
+            border-color: var(--primary-color, #007bff);
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        .document-actions {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .document-item:hover .document-actions {
+            opacity: 1;
+        }
+
+        /* Status indicators */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .status-uploaded {
+            background-color: rgba(23, 162, 184, 0.1);
+            color: #17a2b8;
+        }
+
+        .status-processing {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: #ffc107;
+        }
+
+        .status-processed, .status-completed {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: #28a745;
+        }
+
+        .status-failed {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+        }
+
+        /* Responsive improvements */
         @media (max-width: 768px) {
             .chat-input-container {
                 padding: 12px;
@@ -188,20 +207,9 @@
                 height: 40px;
             }
 
-            .form-row {
-                grid-template-columns: 1fr;
+            .document-actions {
+                opacity: 1; /* Always show on mobile */
             }
-        }
-
-        /* Dark theme support */
-        .dark-theme .search-suggestions {
-            background: var(--bg-dark, #2d3748);
-            border-color: var(--border-dark, #4a5568);
-        }
-
-        .dark-theme .search-suggestion:hover,
-        .dark-theme .search-suggestion.active {
-            background: var(--hover-dark, #4a5568);
         }
     </style>
 </head>
@@ -249,9 +257,12 @@
                                     <i class="fas fa-cloud-upload-alt"></i>
                                 </div>
                                 <div class="upload-text">Drop files here or click to browse</div>
-                                <div class="upload-subtext">Supports PDF, DOC, DOCX, TXT files</div>
+                                <div class="upload-subtext">
+                                    Supports PDF, DOC, DOCX, TXT, MD, RTF, CSV, XLSX, XLS, PPTX, PPT, JSON, XML, HTML, and Image files
+                                </div>
                                 <input type="file" class="form-control" id="fileInput"
-                                       accept=".pdf,.doc,.docx,.txt" required>
+                                       accept=".pdf,.doc,.docx,.txt,.md,.rtf,.csv,.xlsx,.xls,.pptx,.ppt,.json,.xml,.html,.htm,.jpg,.jpeg,.png,.bmp,.tiff,.tif,.gif,.webp"
+                                       multiple required>
                             </div>
 
                             <div class="form-group">
@@ -267,38 +278,38 @@
                             </div>
 
                             <button type="submit" class="btn btn-primary w-100">
-                                <i class="fas fa-upload"></i> Upload Document
+                                <i class="fas fa-upload"></i> Upload Document(s)
                             </button>
 
                             <div id="uploadProgress" class="upload-progress" style="display: none;">
                                 <div class="progress">
-                                    <div class="progress-bar" role="progressbar"></div>
+                                    <div class="progress-bar" role="progressbar" style="width: 0%"></div>
                                 </div>
-                                <small id="uploadStatus">Uploading...</small>
+                                <small id="uploadStatus">Preparing upload...</small>
                             </div>
                         </form>
                     </div>
 
-                    <!-- Document List -->
-                    <div class="section">
-                        <div class="section-header">
-                            <h2 class="section-title">
-                                <i class="fas fa-file-pdf"></i> Documents
-                            </h2>
-                            <div class="section-actions">
-                                <button class="btn btn-outline btn-sm" onclick="loadDocuments()" title="Refresh">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                        </div>
+<!--                    &lt;!&ndash; Document List &ndash;&gt;-->
+<!--                    <div class="section">-->
+<!--                        <div class="section-header">-->
+<!--                            <h2 class="section-title">-->
+<!--                                <i class="fas fa-folder-open"></i> Documents-->
+<!--                            </h2>-->
+<!--                            <div class="section-actions">-->
+<!--                                <button class="btn btn-outline btn-sm" onclick="loadDocuments()" title="Refresh">-->
+<!--                                    <i class="fas fa-sync-alt"></i>-->
+<!--                                </button>-->
+<!--                            </div>-->
+<!--                        </div>-->
 
-                        <div class="pdf-list" id="documentList">
-                            <div class="loading">
-                                <div class="loading-spinner"></div>
-                                <span>Loading documents...</span>
-                            </div>
-                        </div>
-                    </div>
+<!--                        <div class="pdf-list" id="documentList">-->
+<!--                            <div class="loading">-->
+<!--                                <div class="loading-spinner"></div>-->
+<!--                                <span>Loading documents...</span>-->
+<!--                            </div>-->
+<!--                        </div>-->
+<!--                    </div>-->
 
                     <!-- Stats -->
                     <div class="section">
@@ -314,7 +325,7 @@
                                 <div class="stat-label">Documents</div>
                             </div>
                             <div class="stat-card">
-                                                               <div class="stat-value" id="totalSearches">-</div>
+                                <div class="stat-value" id="totalSearches">-</div>
                                 <div class="stat-label">Searches</div>
                             </div>
                         </div>
@@ -329,7 +340,7 @@
                                 <i class="fas fa-comments"></i> RAG Assistant
                             </h2>
                             <div class="section-actions">
-                                <button class="btn btn-outline btn-sm" onclick="clearChat()">
+                                                                <button class="btn btn-outline btn-sm" onclick="clearChat()">
                                     <i class="fas fa-trash"></i> Clear
                                 </button>
                                 <button class="btn btn-outline btn-sm" onclick="loadStats()">
@@ -362,8 +373,20 @@
                                     <select class="form-control" id="filterDocType">
                                         <option value="">All Types</option>
                                         <option value="pdf">PDF</option>
-                                        <option value="doc">Word Document</option>
+                                        <option value="docx">Word Document (DOCX)</option>
+                                        <option value="doc">Word Document (DOC)</option>
+                                        <option value="xlsx">Excel Spreadsheet (XLSX)</option>
+                                        <option value="xls">Excel Spreadsheet (XLS)</option>
+                                        <option value="pptx">PowerPoint (PPTX)</option>
+                                        <option value="ppt">PowerPoint (PPT)</option>
                                         <option value="txt">Text File</option>
+                                        <option value="md">Markdown</option>
+                                        <option value="rtf">Rich Text Format</option>
+                                        <option value="csv">CSV</option>
+                                        <option value="json">JSON</option>
+                                        <option value="xml">XML</option>
+                                        <option value="html">HTML</option>
+                                        <option value="image">Image Files</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -424,11 +447,49 @@
                                         <div class="card-body">
                                             <p>You can:</p>
                                             <ul>
-                                                <li>Upload PDF, DOC, DOCX, or TXT documents</li>
+                                                <li>Upload various document types: PDF, Word, Excel, PowerPoint, Text, Markdown, and more</li>
                                                 <li>Ask questions about your documents using AI</li>
                                                 <li>Search for specific content across all documents</li>
                                                 <li>Get AI-powered answers with source citations</li>
+                                                <li>Process images with OCR for text extraction</li>
                                             </ul>
+                                            <div class="supported-formats">
+                                                <h4>Supported File Types:</h4>
+                                                <div class="format-grid">
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-pdf file-type-icon file-type-pdf"></i>
+                                                        <span>PDF</span>
+                                                    </div>
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-word file-type-icon file-type-word"></i>
+                                                        <span>Word (DOC/DOCX)</span>
+                                                    </div>
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-excel file-type-icon file-type-excel"></i>
+                                                        <span>Excel (XLS/XLSX)</span>
+                                                    </div>
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-powerpoint file-type-icon file-type-powerpoint"></i>
+                                                        <span>PowerPoint (PPT/PPTX)</span>
+                                                    </div>
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-alt file-type-icon file-type-text"></i>
+                                                        <span>Text/Markdown</span>
+                                                    </div>
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-csv file-type-icon file-type-csv"></i>
+                                                        <span>CSV</span>
+                                                    </div>
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-image file-type-icon file-type-image"></i>
+                                                        <span>Images (OCR)</span>
+                                                    </div>
+                                                    <div class="format-item">
+                                                        <i class="fas fa-file-code file-type-icon file-type-json"></i>
+                                                        <span>JSON/XML/HTML</span>
+                                                    </div>
+                                                </div>
+                                            </div>
                                             <p class="text-muted">
                                                 <strong>Tip:</strong> Use <kbd>↑</kbd>/<kbd>↓</kbd> to navigate search suggestions,
                                                 <kbd>Enter</kbd> to select, <kbd>Esc</kbd> to close.
@@ -467,34 +528,7 @@
     <!-- Status Container -->
     <div class="status-container" id="statusContainer"></div>
 
-    <!-- Search History Modal -->
-    <div id="searchHistoryModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Search History</h2>
-                <div class="modal-actions">
-                    <button class="btn btn-ghost btn-sm" onclick="exportSearchHistory()" title="Export History">
-                        <i class="fas fa-download"></i>
-                    </button>
-                    <button class="btn btn-ghost btn-sm" onclick="clearSearchHistory()" title="Clear History">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                    <button class="modal-close" onclick="hideSearchHistory()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="modal-body">
-                <div class="search-history" id="searchHistoryList">
-                    <div class="loading">
-                        <div class="loading-spinner"></div>
-                        <span>Loading search history...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <!-- All Modals (Help, Search History, Document Viewer, etc.) -->
     <!-- Help Modal -->
     <div id="helpModal" class="modal">
         <div class="modal-content">
@@ -510,7 +544,8 @@
                     <ul>
                         <li>Drag and drop files onto the upload area</li>
                         <li>Or click the upload area to browse for files</li>
-                        <li>Supported formats: PDF, DOC, DOCX, TXT</li>
+                        <li>Multiple file selection is supported</li>
+                        <li>Supported formats: PDF, Word, Excel, PowerPoint, Text, Images, and more</li>
                         <li>Add optional title and category for better organization</li>
                     </ul>
                 </div>
@@ -521,95 +556,11 @@
                         <li><strong>Search Only:</strong> Find specific content across all documents</li>
                     </ul>
                 </div>
-                <div class="help-section">
-                    <h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>
-                    <div class="shortcuts-grid">
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>L</kbd> <span>Clear chat</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>R</kbd> <span>Refresh stats</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>K</kbd> <span>Focus search</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>D</kbd> <span>Toggle dark mode</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Enter</kbd> <span>Send message</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Shift</kbd> + <kbd>Enter</kbd> <span>New line in message</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>↑</kbd> / <kbd>↓</kbd> <span>Navigate suggestions</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Esc</kbd> <span>Close suggestions/modals</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>F1</kbd> or <kbd>?</kbd> <span>Show help</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="help-section">
-                    <h3><i class="fas fa-tips"></i> Tips & Best Practices</h3>
-                    <ul>
-                        <li>Be specific in your questions for better AI responses</li>
-                        <li>Use categories to organize your documents</li>
-                        <li>Check the sources provided with AI answers</li>
-                        <li>Use search history to revisit previous queries</li>
-                        <li>Try different search modes for different needs</li>
-                    </ul>
-                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-primary" onclick="hideHelp()">Got it!</button>
             </div>
         </div>
-    </div>
-
-    <!-- Document Viewer Modal -->
-    <div id="documentViewerModal" class="modal modal-large">
-        <div class="modal-content document-viewer">
-            <div class="modal-header">
-                <h2 class="modal-title" id="documentViewerTitle">Document Viewer</h2>
-                <div class="modal-actions">
-                    <button class="btn btn-ghost btn-sm" onclick="downloadDocument()" title="Download">
-                        <i class="fas fa-download"></i>
-                    </button>
-                    <button class="btn btn-ghost btn-sm" onclick="printDocument()" title="Print">
-                        <i class="fas fa-print"></i>
-                    </button>
-                    <button class="modal-close" onclick="closeDocumentViewer()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="modal-body">
-                <div class="document-content" id="documentContent">
-                    <div class="loading">
-                        <div class="loading-spinner"></div>
-                        <span>Loading document...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
-        <div class="loading-content">
-            <div class="loading-spinner large"></div>
-            <div class="loading-text" id="loadingText">Loading...</div>
-        </div>
-    </div>
-
-    <!-- Offline Indicator -->
-    <div id="offlineIndicator" class="offline-indicator" style="display: none;">
-        <i class="fas fa-wifi-slash"></i>
-        <span>You are currently offline</span>
     </div>
 
     <!-- Global Configuration Script (Must load first) -->
@@ -618,14 +569,43 @@
         window.API_BASE_URL = 'http://localhost:8000';
         window.APP_CONFIG = {
             upload: {
-                allowedTypes: ['pdf', 'doc', 'docx', 'txt'],
-                maxFileSize: 50 * 1024 * 1024, // 50MB
-                maxBulkFiles: 10
+                allowedTypes: [
+                    'pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'csv',
+                    'xlsx', 'xls', 'pptx', 'ppt', 'json', 'xml', 'html', 'htm',
+                    'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'gif', 'webp'
+                ],
+                maxFileSize: 100 * 1024 * 1024, // 100MB
+                maxBulkFiles: 20
             },
             search: {
                 defaultLimit: 10,
                 maxLimit: 50,
                 suggestionsLimit: 5
+            },
+            fileTypeIcons: {
+                'pdf': 'fas fa-file-pdf file-type-pdf',
+                'doc': 'fas fa-file-word file-type-word',
+                'docx': 'fas fa-file-word file-type-word',
+                'xlsx': 'fas fa-file-excel file-type-excel',
+                'xls': 'fas fa-file-excel file-type-excel',
+                'pptx': 'fas fa-file-powerpoint file-type-powerpoint',
+                'ppt': 'fas fa-file-powerpoint file-type-powerpoint',
+                'txt': 'fas fa-file-alt file-type-text',
+                'md': 'fas fa-file-alt file-type-text',
+                'rtf': 'fas fa-file-alt file-type-text',
+                'csv': 'fas fa-file-csv file-type-csv',
+                'json': 'fas fa-file-code file-type-json',
+                'xml': 'fas fa-file-code file-type-xml',
+                'html': 'fas fa-file-code file-type-html',
+                'htm': 'fas fa-file-code file-type-html',
+                'jpg': 'fas fa-file-image file-type-image',
+                'jpeg': 'fas fa-file-image file-type-image',
+                'png': 'fas fa-file-image file-type-image',
+                'bmp': 'fas fa-file-image file-type-image',
+                'tiff': 'fas fa-file-image file-type-image',
+                'tif': 'fas fa-file-image file-type-image',
+                'gif': 'fas fa-file-image file-type-image',
+                'webp': 'fas fa-file-image file-type-image'
             }
         };
 
@@ -635,14 +615,6 @@
         window.currentSearchMode = 'rag';
         window.isDarkMode = false;
 
-        // DOM element references (will be set after DOM loads)
-        window.fileInput = null;
-        window.uploadForm = null;
-        window.uploadArea = null;
-        window.chatContainer = null;
-        window.messageInput = null;
-        window.chatForm = null;
-
         // Utility functions
         window.escapeHtml = (text) => {
             if (!text) return '';
@@ -651,7 +623,7 @@
             return div.innerHTML;
         };
 
-                window.formatFileSize = (bytes) => {
+        window.formatFileSize = (bytes) => {
             if (!bytes || isNaN(bytes)) return '0 B';
             const k = 1024;
             const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -666,31 +638,111 @@
                 if (isNaN(date.getTime())) return 'Unknown';
                 return date.toLocaleDateString();
             } catch (error) {
-                return 'Unknown';
+                                return 'Unknown';
             }
         };
 
-        // Initialize DOM references after DOM loads
+        window.getFileTypeIcon = (filename) => {
+            if (!filename) return 'fas fa-file file-type-text';
+            const extension = filename.split('.').pop()?.toLowerCase();
+            return window.APP_CONFIG.fileTypeIcons[extension] || 'fas fa-file file-type-text';
+        };
+
+        window.getFileTypeName = (filename) => {
+            if (!filename) return 'Unknown';
+            const extension = filename.split('.').pop()?.toLowerCase();
+            const typeNames = {
+                'pdf': 'PDF Document',
+                'doc': 'Word Document',
+                'docx': 'Word Document',
+                'xlsx': 'Excel Spreadsheet',
+                'xls': 'Excel Spreadsheet',
+                'pptx': 'PowerPoint Presentation',
+                'ppt': 'PowerPoint Presentation',
+                'txt': 'Text File',
+                'md': 'Markdown File',
+                'rtf': 'Rich Text Format',
+                'csv': 'CSV File',
+                'json': 'JSON File',
+                'xml': 'XML File',
+                'html': 'HTML File',
+                'htm': 'HTML File',
+                'jpg': 'JPEG Image',
+                'jpeg': 'JPEG Image',
+                'png': 'PNG Image',
+                'bmp': 'BMP Image',
+                'tiff': 'TIFF Image',
+                'tif': 'TIFF Image',
+                'gif': 'GIF Image',
+                'webp': 'WebP Image'
+            };
+            return typeNames[extension] || 'Unknown File Type';
+        };
+
+        // Connection status check
+        window.checkConnection = async () => {
+            try {
+                const response = await fetch(`${window.API_BASE_URL}/health`, {
+                    method: 'GET',
+                    timeout: 5000
+                });
+
+                const isConnected = response.ok;
+                window.isConnected = isConnected;
+
+                const indicator = document.getElementById('connectionIndicator');
+                const statusText = document.getElementById('statusText');
+                const statusDot = document.getElementById('statusDot');
+
+                if (indicator && statusText) {
+                    if (isConnected) {
+                        indicator.className = 'connection-indicator connected';
+                        statusText.textContent = 'Connected';
+                    } else {
+                        indicator.className = 'connection-indicator disconnected';
+                        statusText.textContent = 'Disconnected';
+                    }
+                }
+
+                return isConnected;
+            } catch (error) {
+                console.warn('Connection check failed:', error);
+                window.isConnected = false;
+
+                const indicator = document.getElementById('connectionIndicator');
+                const statusText = document.getElementById('statusText');
+
+                if (indicator && statusText) {
+                    indicator.className = 'connection-indicator disconnected';
+                    statusText.textContent = 'Connection Failed';
+                }
+
+                return false;
+            }
+        };
+
+        // Initialize connection check
         document.addEventListener('DOMContentLoaded', () => {
-            window.fileInput = document.getElementById('fileInput');
-            window.uploadForm = document.getElementById('uploadForm');
-            window.uploadArea = document.getElementById('uploadArea');
-            window.chatContainer = document.getElementById('chatContainer');
-            window.messageInput = document.getElementById('messageInput');
-            window.chatForm = document.getElementById('chatForm');
+            // Check connection immediately
+            window.checkConnection();
+
+            // Check connection every 30 seconds
+            setInterval(window.checkConnection, 30000);
         });
+
+        console.log('Global configuration loaded');
     </script>
 
     <!-- Core JavaScript Files (Load in order) -->
-      <script src="js/utils.js"></script>
+    <script src="js/utils.js"></script>
     <script src="js/notifications.js"></script>
     <script src="js/keyboard.js"></script>
     <script src="js/modal.js"></script>
     <script src="js/stats.js"></script>
-    <script src="js/chat.js"></script>
     <script src="js/upload.js"></script>
     <script src="js/documents.js"></script>
     <script src="js/search.js"></script>
+    <script src="js/chat.js"></script>
     <script src="js/app.js"></script>
 
     <!-- Additional functionality scripts -->
@@ -731,115 +783,26 @@
             // Apply filters to current search
             if (window.searchManager) {
                 window.searchManager.setAdvancedFilters(filters);
-                showStatus('Advanced search filters applied', 'success');
+                if (window.showStatus) {
+                    window.showStatus('Advanced search filters applied', 'success');
+                }
             }
         }
 
         // Search history functionality
         function showSearchHistory() {
-            const modal = document.getElementById('searchHistoryModal');
-            if (modal && window.searchManager) {
-                const historyList = document.getElementById('searchHistoryList');
-                const history = window.searchManager.getSearchHistory(20);
-
-                if (history.length === 0) {
-                    historyList.innerHTML = '<div class="text-center text-muted">No search history yet</div>';
-                } else {
-                    historyList.innerHTML = history.map(item => `
-                        <div class="search-history-item" onclick="selectHistoryItem('${escapeHtml(item.query)}')">
-                            <div class="search-history-query">${escapeHtml(item.query)}</div>
-                            <div class="search-history-meta">
-                                <span class="search-mode-badge ${item.mode}">${item.mode.toUpperCase()}</span>
-                                <span>${formatTimestamp(item.timestamp)}</span>
-                                <span>${item.resultCount} results</span>
-                            </div>
-                        </div>
-                    `).join('');
-                }
-
-                modal.style.display = 'flex';
+            console.log('Show search history clicked');
+            if (window.showStatus) {
+                window.showStatus('Search history feature coming soon', 'info');
             }
         }
-
-        function hideSearchHistory() {
-            const modal = document.getElementById('searchHistoryModal');
-            if (modal) {
-                modal.style.display = 'none';
-            }
-        }
-
-        function selectHistoryItem(query) {
-            if (window.messageInput) {
-                window.messageInput.value = query;
-                window.messageInput.focus();
-            }
-            hideSearchHistory();
-        }
-
-        function exportSearchHistory() {
-            if (window.searchManager) {
-                window.searchManager.exportSearchHistory();
-                showStatus('Search history exported', 'success');
-            }
-        }
-
-        function clearSearchHistory() {
-            if (confirm('Are you sure you want to clear your search history?')) {
-                if (window.searchManager) {
-                    window.searchManager.clearSearchHistory();
-                    showStatus('Search history cleared', 'success');
-                    hideSearchHistory();
-                }
-            }
-        }
-
-        // Document viewer functionality
-        function downloadDocument() {
-            // Implementation for document download
-            showStatus('Download functionality not implemented yet', 'info');
-        }
-
-        function printDocument() {
-            const content = document.getElementById('documentContent');
-            if (content) {
-                const printWindow = window.open('', '_blank');
-                printWindow.document.write(`
-                    <html>
-                        <head>
-                            <title>Document Print</title>
-                            <style>
-                                body { font-family: Arial, sans-serif; margin: 20px; }
-                                .document-content { line-height: 1.6; }
-                            </style>
-                        </head>
-                        <body>
-                            <div class="document-content">${content.innerHTML}</div>
-                        </body>
-                    </html>
-                `);
-                printWindow.document.close();
-                printWindow.print();
-            }
-        }
-
-        // Similarity threshold slider
-        document.addEventListener('DOMContentLoaded', () => {
-            const slider = document.getElementById('similarityThreshold');
-            const valueDisplay = document.getElementById('thresholdValue');
-
-            if (slider && valueDisplay) {
-                slider.addEventListener('input', (e) => {
-                    valueDisplay.textContent = e.target.value;
-                });
-            }
-        });
 
         // Global search mode function
         function setSearchMode(mode) {
-            if (window.searchManager) {
-                window.searchManager.setSearchMode(mode);
+            if (window.chatManager) {
+                window.chatManager.setSearchMode(mode);
             } else {
-                // Fallback if search manager not ready
+                // Fallback if chat manager not ready
                 window.currentSearchMode = mode;
 
                 // Update UI
@@ -866,6 +829,18 @@
             }
         }
 
+        // Similarity threshold slider
+        document.addEventListener('DOMContentLoaded', () => {
+            const slider = document.getElementById('similarityThreshold');
+            const valueDisplay = document.getElementById('thresholdValue');
+
+            if (slider && valueDisplay) {
+                slider.addEventListener('input', (e) => {
+                    valueDisplay.textContent = e.target.value;
+                });
+            }
+        });
+
         // Enhanced keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             // Don't trigger shortcuts when typing in inputs (except for specific cases)
@@ -875,14 +850,9 @@
                 switch (e.key) {
                     case 'k':
                         e.preventDefault();
-                        if (window.messageInput) {
-                            window.messageInput.focus();
-                        }
-                        break;
-                    case 'd':
-                        if (!isInputFocused) {
-                            e.preventDefault();
-                            toggleTheme();
+                        const messageInput = document.getElementById('messageInput');
+                        if (messageInput) {
+                            messageInput.focus();
                         }
                         break;
                     case 'l':
@@ -897,195 +867,75 @@
                             loadStats();
                         }
                         break;
+                    case 'd':
+                        if (!isInputFocused) {
+                            e.preventDefault();
+                            toggleTheme();
+                        }
+                        break;
                     case 'u':
                         if (!isInputFocused) {
                             e.preventDefault();
-                            if (window.fileInput) {
-                                window.fileInput.click();
+                            const fileInput = document.getElementById('fileInput');
+                            if (fileInput) {
+                                fileInput.click();
                             }
-                        }
-                        break;
-                    case '/':
-                        if (!isInputFocused) {
-                            e.preventDefault();
-                            showHelp();
                         }
                         break;
                 }
             }
 
-            // Help shortcuts
-            if ((e.key === 'F1' || (e.key === '?' && !isInputFocused)) && !e.ctrlKey && !e.metaKey) {
+            // Help shortcut
+            if ((e.key === 'F1' || e.key === '?') && !isInputFocused) {
                 e.preventDefault();
                 showHelp();
             }
 
-            // Escape key handling
+            // Escape key to close modals
             if (e.key === 'Escape') {
-                // Close any open modals
-                document.querySelectorAll('.modal').forEach(modal => {
+                const modals = document.querySelectorAll('.modal');
+                modals.forEach(modal => {
                     if (modal.style.display === 'flex') {
                         modal.style.display = 'none';
                     }
                 });
+            }
+        });
 
-                // Hide search suggestions
-                if (window.searchManager) {
-                    window.searchManager.hideSearchSuggestions();
+        // Error handling for failed script loads
+        window.addEventListener('error', (e) => {
+            if (e.target.tagName === 'SCRIPT') {
+                console.error('Failed to load script:', e.target.src);
+                const statusContainer = document.getElementById('statusContainer');
+                if (statusContainer) {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'status-message status-error';
+                    errorDiv.innerHTML = `
+                        <i class="fas fa-exclamation-triangle status-icon"></i>
+                        <span class="status-text">Failed to load application scripts. Please refresh the page.</span>
+                        <button class="status-close" onclick="this.parentElement.remove()">×</button>
+                    `;
+                    statusContainer.appendChild(errorDiv);
                 }
             }
         });
 
-        // Handle textarea auto-resize
-        function autoResizeTextarea(textarea) {
-            if (!textarea) return;
-
-            textarea.style.height = 'auto';
-            const newHeight = Math.min(textarea.scrollHeight, 120);
-            textarea.style.height = newHeight + 'px';
-        }
-
-        // Initialize textarea auto-resize
+        // Initialize theme from localStorage
         document.addEventListener('DOMContentLoaded', () => {
-            const messageInput = document.getElementById('messageInput');
-            if (messageInput) {
-                messageInput.addEventListener('input', () => {
-                    autoResizeTextarea(messageInput);
-                });
-
-                // Handle Enter key for form submission
-                messageInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        // Check if suggestions are visible and handle them first
-                        if (window.searchManager && window.searchManager.isSuggestionsVisible()) {
-                            // Let search manager handle this
-                            return;
-                        }
-
-                        e.preventDefault();
-                        const form = document.getElementById('chatForm');
-                        if (form) {
-                            form.dispatchEvent(new Event('submit'));
-                        }
-                    }
-                });
-            }
-        });
-
-        // Loading overlay functions
-        function showLoadingOverlay(text = 'Loading...') {
-            const overlay = document.getElementById('loadingOverlay');
-            const loadingText = document.getElementById('loadingText');
-
-            if (overlay) {
-                if (loadingText) {
-                    loadingText.textContent = text;
-                }
-                overlay.style.display = 'flex';
-            }
-        }
-
-        function hideLoadingOverlay() {
-            const overlay = document.getElementById('loadingOverlay');
-            if (overlay) {
-                overlay.style.display = 'none';
-            }
-        }
-
-        // Network status handling
-        function updateNetworkStatus() {
-            const isOnline = navigator.onLine;
-            const indicator = document.getElementById('offlineIndicator');
-
-            if (indicator) {
-                indicator.style.display = isOnline ? 'none' : 'flex';
-            }
-
-            if (!isOnline) {
-                showStatus('You are currently offline. Some features may not work.', 'warning', 0);
-            }
-        }
-
-        // Initialize network status monitoring
-        window.addEventListener('online', () => {
-            updateNetworkStatus();
-            showStatus('Connection restored', 'success');
-
-            // Retry connection check
-            if (window.checkServerConnection) {
-                window.checkServerConnection();
-            }
-        });
-
-        window.addEventListener('offline', () => {
-            updateNetworkStatus();
-        });
-
-        // Initialize on DOM load
-        document.addEventListener('DOMContentLoaded', () => {
-            updateNetworkStatus();
-
-            // Load saved search mode
-            const savedMode = localStorage.getItem('rag_search_mode') || 'rag';
-            setSearchMode(savedMode);
-
-            // Initialize theme
             const savedTheme = localStorage.getItem('rag_theme');
             if (savedTheme === 'dark') {
-                document.body.classList.add('dark-theme');
+                document.body.classList.add('theme-dark');
+                window.isDarkMode = true;
                 const themeIcon = document.getElementById('themeIcon');
                 if (themeIcon) {
                     themeIcon.className = 'fas fa-sun';
                 }
-                window.isDarkMode = true;
             }
         });
 
-        // Modal click outside to close
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal')) {
-                e.target.style.display = 'none';
-            }
-        });
-
-        // Prevent form submission when suggestions are visible
-        document.addEventListener('DOMContentLoaded', () => {
-            const chatForm = document.getElementById('chatForm');
-            if (chatForm) {
-                chatForm.addEventListener('submit', (e) => {
-                    // Check if search suggestions are visible
-                    if (window.searchManager && window.searchManager.isSuggestionsVisible()) {
-                        const activeSuggestion = document.querySelector('.search-suggestion.active');
-                        if (activeSuggestion) {
-                            e.preventDefault();
-                            window.searchManager.selectSuggestion(activeSuggestion.textContent.trim());
-                            return false;
-                        }
-                    }
-
-                    // Continue with normal form submission
-                    // This will be handled by the chat manager in app.js
-                });
-            }
-        });
-
-        console.log('RAG Chat Application HTML loaded successfully');
-    </script>
-
-    <!-- Service Worker Registration -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => {
-                        console.log('Service Worker registered:', registration);
-                    })
-                    .catch(error => {
-                        console.log('Service Worker registration failed:', error);
-                    });
-            });
-        }
+        console.log('Main HTML script loaded');
     </script>
 </body>
 </html>
+
 

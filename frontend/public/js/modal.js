@@ -1,43 +1,37 @@
 // RAG Chat Application - Modal Management
-// Handles modal dialogs, popups, and overlays
+// Handles modal dialogs and overlays
 
 class ModalManager {
     constructor() {
-        this.modals = new Map();
-        this.activeModal = null;
-        this.modalStack = [];
+        this.activeModals = new Set();
         this.init();
     }
 
     init() {
         console.log('Initializing Modal Manager...');
         this.setupEventListeners();
-        this.registerExistingModals();
-
-        // Register globally
         window.modalManager = this;
-
         console.log('Modal manager initialized');
     }
 
     setupEventListeners() {
-        // Close modal when clicking outside
+        // Close modal on escape key
+                document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeTopModal();
+            }
+        });
+
+        // Close modal on backdrop click
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
                 this.close(e.target.id);
             }
         });
 
-        // Handle escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.activeModal) {
-                this.close(this.activeModal);
-            }
-        });
-
-        // Handle modal close
-                document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal-close')) {
+        // Handle modal close buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-close') || e.target.closest('.modal-close')) {
                 const modal = e.target.closest('.modal');
                 if (modal) {
                     this.close(modal.id);
@@ -46,470 +40,311 @@ class ModalManager {
         });
     }
 
-    registerExistingModals() {
-        // Register existing modals in the DOM
-        document.querySelectorAll('.modal').forEach(modal => {
-            if (modal.id) {
-                this.register(modal.id, modal);
-            }
-        });
-    }
-
-    register(id, modalElement) {
-        if (!modalElement) {
-            modalElement = document.getElementById(id);
-        }
-
-        if (modalElement) {
-            this.modals.set(id, {
-                element: modalElement,
-                isOpen: false,
-                options: {}
-            });
-            console.log(`Modal registered: ${id}`);
-        } else {
-            console.warn(`Modal element not found: ${id}`);
-        }
-    }
-
-    create(id, options = {}) {
-        const defaultOptions = {
-            title: 'Modal',
-            content: '',
-            size: 'medium', // small, medium, large, fullscreen
-            closable: true,
-            backdrop: true,
-            keyboard: true,
-            className: '',
-            buttons: []
-        };
-
-        const modalOptions = { ...defaultOptions, ...options };
-
-        // Create modal HTML
-        const modalHTML = `
-            <div class="modal ${modalOptions.className}" id="${id}" style="display: none;">
-                <div class="modal-content modal-${modalOptions.size}">
-                    <div class="modal-header">
-                        <h2 class="modal-title">${modalOptions.title}</h2>
-                        ${modalOptions.closable ? `
-                            <button class="modal-close" type="button">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        ` : ''}
-                    </div>
-                    <div class="modal-body">
-                        ${modalOptions.content}
-                    </div>
-                    ${modalOptions.buttons.length > 0 ? `
-                        <div class="modal-footer">
-                            ${modalOptions.buttons.map(btn => `
-                                <button class="btn ${btn.className || 'btn-secondary'}" 
-                                        onclick="${btn.onclick || ''}"
-                                        ${btn.attributes || ''}>
-                                    ${btn.text}
-                                </button>
-                            `).join('')}
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-
-        // Add to DOM
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-        // Register the modal
-        const modalElement = document.getElementById(id);
-        this.register(id, modalElement);
-
-        return modalElement;
-    }
-
-    open(id, options = {}) {
-        const modal = this.modals.get(id);
+    open(modalId, options = {}) {
+        const modal = document.getElementById(modalId);
         if (!modal) {
-            console.warn(`Modal not found: ${id}`);
+            console.error(`Modal with id "${modalId}" not found`);
             return false;
         }
 
-        // Close current modal if specified
-        if (options.closeOthers && this.activeModal && this.activeModal !== id) {
-            this.close(this.activeModal);
-        }
-
-        // Add to modal stack
-        if (!this.modalStack.includes(id)) {
-            this.modalStack.push(id);
-        }
+        // Add to active modals
+        this.activeModals.add(modalId);
 
         // Show modal
-        modal.element.style.display = 'flex';
-        modal.isOpen = true;
-        this.activeModal = id;
-
-        // Add body class to prevent scrolling
-        document.body.classList.add('modal-open');
+        modal.style.display = 'flex';
+        modal.classList.add('show');
 
         // Focus management
-        this.manageFocus(modal.element);
+        if (options.focusElement) {
+            const focusElement = modal.querySelector(options.focusElement);
+            if (focusElement) {
+                setTimeout(() => focusElement.focus(), 100);
+            }
+        } else {
+            // Focus first focusable element
+            const focusableElements = modal.querySelectorAll(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            );
+            if (focusableElements.length > 0) {
+                setTimeout(() => focusableElements[0].focus(), 100);
+            }
+        }
+
+        // Prevent body scroll
+        if (this.activeModals.size === 1) {
+            document.body.style.overflow = 'hidden';
+        }
 
         // Trigger custom event
-        const event = new CustomEvent('modalOpen', { detail: { id, modal } });
-        document.dispatchEvent(event);
+        modal.dispatchEvent(new CustomEvent('modal:open', { detail: options }));
 
-        console.log(`Modal opened: ${id}`);
         return true;
     }
 
-    close(id) {
-        const modal = this.modals.get(id);
-        if (!modal || !modal.isOpen) {
+    close(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) {
+            console.error(`Modal with id "${modalId}" not found`);
             return false;
         }
 
+        // Remove from active modals
+        this.activeModals.delete(modalId);
+
         // Hide modal
-        modal.element.style.display = 'none';
-        modal.isOpen = false;
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
 
-        // Remove from modal stack
-        const index = this.modalStack.indexOf(id);
-        if (index > -1) {
-            this.modalStack.splice(index, 1);
+        // Restore body scroll if no modals are open
+        if (this.activeModals.size === 0) {
+            document.body.style.overflow = '';
         }
-
-        // Update active modal
-        if (this.activeModal === id) {
-            this.activeModal = this.modalStack.length > 0 ?
-                this.modalStack[this.modalStack.length - 1] : null;
-        }
-
-        // Remove body class if no modals are open
-        if (this.modalStack.length === 0) {
-            document.body.classList.remove('modal-open');
-        }
-
-        // Restore focus
-        this.restoreFocus();
 
         // Trigger custom event
-        const event = new CustomEvent('modalClose', { detail: { id, modal } });
-        document.dispatchEvent(event);
+        modal.dispatchEvent(new CustomEvent('modal:close'));
 
-        console.log(`Modal closed: ${id}`);
         return true;
     }
 
     closeAll() {
-        const openModals = [...this.modalStack];
-        openModals.forEach(id => this.close(id));
+        const modalIds = Array.from(this.activeModals);
+        modalIds.forEach(id => this.close(id));
     }
 
-    toggle(id) {
-        const modal = this.modals.get(id);
-        if (!modal) return false;
-
-        return modal.isOpen ? this.close(id) : this.open(id);
+    closeTopModal() {
+        if (this.activeModals.size > 0) {
+            const modalIds = Array.from(this.activeModals);
+            const topModalId = modalIds[modalIds.length - 1];
+            this.close(topModalId);
+        }
     }
 
-    isOpen(id) {
-        const modal = this.modals.get(id);
-        return modal ? modal.isOpen : false;
+    isOpen(modalId) {
+        return this.activeModals.has(modalId);
     }
 
-    setTitle(id, title) {
-        const modal = this.modals.get(id);
-        if (modal) {
-            const titleElement = modal.element.querySelector('.modal-title');
-            if (titleElement) {
-                titleElement.textContent = title;
+    getActiveModals() {
+        return Array.from(this.activeModals);
+    }
+
+    // Create dynamic modal
+    create(options = {}) {
+        const modalId = options.id || window.generateId('modal');
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal';
+
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+
+        // Header
+        if (options.title) {
+            const header = document.createElement('div');
+            header.className = 'modal-header';
+            header.innerHTML = `
+                <h2 class="modal-title">${window.escapeHtml(options.title)}</h2>
+                <button class="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            content.appendChild(header);
+        }
+
+        // Body
+        const body = document.createElement('div');
+        body.className = 'modal-body';
+        if (options.content) {
+            if (typeof options.content === 'string') {
+                body.innerHTML = options.content;
+            } else {
+                body.appendChild(options.content);
             }
         }
-    }
+        content.appendChild(body);
 
-    setContent(id, content) {
-        const modal = this.modals.get(id);
-        if (modal) {
-            const bodyElement = modal.element.querySelector('.modal-body');
-            if (bodyElement) {
-                bodyElement.innerHTML = content;
-            }
-        }
-    }
+        // Footer
+        if (options.buttons && options.buttons.length > 0) {
+            const footer = document.createElement('div');
+            footer.className = 'modal-footer';
 
-    setSize(id, size) {
-        const modal = this.modals.get(id);
-        if (modal) {
-            const contentElement = modal.element.querySelector('.modal-content');
-            if (contentElement) {
-                // Remove existing size classes
-                contentElement.classList.remove('modal-small', 'modal-medium', 'modal-large', 'modal-fullscreen');
-                // Add new size class
-                contentElement.classList.add(`modal-${size}`);
-            }
-        }
-    }
-
-    manageFocus(modalElement) {
-        // Store currently focused element
-        this.previouslyFocused = document.activeElement;
-
-        // Focus first focusable element in modal
-        const focusableElements = modalElement.querySelectorAll(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-
-        if (focusableElements.length > 0) {
-            focusableElements[0].focus();
-        }
-    }
-
-    restoreFocus() {
-        // Restore focus to previously focused element
-        if (this.previouslyFocused && typeof this.previouslyFocused.focus === 'function') {
-            this.previouslyFocused.focus();
-        }
-    }
-
-    // Utility methods for common modal types
-    alert(title, message, options = {}) {
-        const id = 'alertModal';
-
-        if (!this.modals.has(id)) {
-            this.create(id, {
-                title: title,
-                content: `<p>${message}</p>`,
-                size: 'small',
-                buttons: [
-                    {
-                        text: 'OK',
-                        className: 'btn-primary',
-                        onclick: `window.modalManager.close('${id}')`
-                    }
-                ],
-                ...options
+            options.buttons.forEach(button => {
+                const btn = document.createElement('button');
+                btn.className = `btn ${button.class || 'btn-primary'}`;
+                btn.textContent = button.text;
+                if (button.onclick) {
+                    btn.addEventListener('click', button.onclick);
+                }
+                footer.appendChild(btn);
             });
-        } else {
-            this.setTitle(id, title);
-            this.setContent(id, `<p>${message}</p>`);
+
+            content.appendChild(footer);
         }
 
-        this.open(id);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+
+        return modalId;
     }
 
-    confirm(title, message, onConfirm, onCancel, options = {}) {
-        const id = 'confirmModal';
-
-        if (!this.modals.has(id)) {
-            this.create(id, {
+    // Confirm dialog
+    confirm(message, title = 'Confirm', options = {}) {
+        return new Promise((resolve) => {
+            const modalId = this.create({
                 title: title,
-                content: `<p>${message}</p>`,
-                size: 'small',
+                content: `<p>${window.escapeHtml(message)}</p>`,
                 buttons: [
                     {
-                        text: 'Cancel',
-                        className: 'btn-secondary',
-                        onclick: `window.modalManager.close('${id}'); ${onCancel ? onCancel.toString() + '()' : ''}`
+                        text: options.cancelText || 'Cancel',
+                        class: 'btn-secondary',
+                        onclick: () => {
+                            this.close(modalId);
+                            this.destroy(modalId);
+                            resolve(false);
+                        }
                     },
                     {
-                        text: 'Confirm',
-                        className: 'btn-primary',
-                        onclick: `window.modalManager.close('${id}'); ${onConfirm ? onConfirm.toString() + '()' : ''}`
+                        text: options.confirmText || 'OK',
+                        class: options.confirmClass || 'btn-primary',
+                        onclick: () => {
+                            this.close(modalId);
+                            this.destroy(modalId);
+                            resolve(true);
+                        }
                     }
-                ],
-                ...options
+                ]
             });
-        } else {
-            this.setTitle(id, title);
-            this.setContent(id, `<p>${message}</p>`);
-        }
 
-        this.open(id);
+            this.open(modalId);
+        });
     }
 
-    prompt(title, message, defaultValue = '', onSubmit, options = {}) {
-        const id = 'promptModal';
-        const inputId = 'promptInput';
-
-        const content = `
-            <p>${message}</p>
-            <div class="form-group">
-                <input type="text" class="form-control" id="${inputId}" 
-                       value="${defaultValue}" placeholder="Enter value...">
-            </div>
-        `;
-
-        if (!this.modals.has(id)) {
-            this.create(id, {
+    // Alert dialog
+    alert(message, title = 'Alert', options = {}) {
+        return new Promise((resolve) => {
+            const modalId = this.create({
                 title: title,
-                content: content,
-                size: 'small',
+                content: `<p>${window.escapeHtml(message)}</p>`,
                 buttons: [
                     {
-                        text: 'Cancel',
-                        className: 'btn-secondary',
-                        onclick: `window.modalManager.close('${id}')`
+                        text: options.buttonText || 'OK',
+                        class: options.buttonClass || 'btn-primary',
+                        onclick: () => {
+                            this.close(modalId);
+                            this.destroy(modalId);
+                            resolve();
+                        }
+                    }
+                ]
+            });
+
+            this.open(modalId);
+        });
+    }
+
+    // Prompt dialog
+    prompt(message, defaultValue = '', title = 'Input', options = {}) {
+        return new Promise((resolve) => {
+            const inputId = window.generateId('input');
+            const content = `
+                <p>${window.escapeHtml(message)}</p>
+                <input type="text" id="${inputId}" class="form-control" value="${window.escapeHtml(defaultValue)}" placeholder="${window.escapeHtml(options.placeholder || '')}">
+            `;
+
+            const modalId = this.create({
+                title: title,
+                content: content,
+                buttons: [
+                    {
+                        text: options.cancelText || 'Cancel',
+                        class: 'btn-secondary',
+                        onclick: () => {
+                            this.close(modalId);
+                            this.destroy(modalId);
+                            resolve(null);
+                        }
                     },
                     {
-                        text: 'Submit',
-                        className: 'btn-primary',
-                        onclick: `
-                            const value = document.getElementById('${inputId}').value;
-                            window.modalManager.close('${id}');
-                            ${onSubmit ? `(${onSubmit.toString()})(value)` : ''}
-                        `
+                        text: options.confirmText || 'OK',
+                        class: options.confirmClass || 'btn-primary',
+                        onclick: () => {
+                            const input = document.getElementById(inputId);
+                            const value = input ? input.value : '';
+                            this.close(modalId);
+                            this.destroy(modalId);
+                            resolve(value);
+                        }
                     }
-                ],
-                ...options
+                ]
             });
-        } else {
-            this.setTitle(id, title);
-            this.setContent(id, content);
-        }
 
-        this.open(id);
-
-        // Focus the input after modal opens
-        setTimeout(() => {
-            const input = document.getElementById(inputId);
-            if (input) {
-                input.focus();
-                input.select();
-            }
-        }, 100);
+            this.open(modalId, { focusElement: `#${inputId}` });
+        });
     }
 
-    loading(title = 'Loading...', message = 'Please wait...') {
-        const id = 'loadingModal';
-
-        const content = `
-            <div class="text-center">
-                <div class="loading-spinner large mb-3"></div>
-                <p>${message}</p>
-            </div>
-        `;
-
-        if (!this.modals.has(id)) {
-            this.create(id, {
-                title: title,
-                content: content,
-                size: 'small',
-                closable: false,
-                backdrop: false,
-                keyboard: false
-            });
-        } else {
-            this.setTitle(id, title);
-            this.setContent(id, content);
-        }
-
-        this.open(id);
-        return id;
-    }
-
-    hideLoading() {
-        this.close('loadingModal');
-    }
-
-    // Document viewer modal
-    showDocument(title, content, options = {}) {
-        const id = 'documentViewerModal';
-
-        if (!this.modals.has(id)) {
-            this.create(id, {
-                title: title,
-                content: content,
-                size: 'large',
-                className: 'document-viewer-modal',
-                buttons: [
-                    {
-                        text: 'Close',
-                        className: 'btn-secondary',
-                        onclick: `window.modalManager.close('${id}')`
-                    }
-                ],
-                ...options
-            });
-        } else {
-            this.setTitle(id, title);
-            this.setContent(id, content);
-        }
-
-        this.open(id);
-    }
-
-    // Image viewer modal
-    showImage(src, title = 'Image Viewer', options = {}) {
-        const id = 'imageViewerModal';
-
-        const content = `
-            <div class="image-viewer">
-                <img src="${src}" alt="${title}" style="max-width: 100%; height: auto;">
-            </div>
-        `;
-
-        if (!this.modals.has(id)) {
-            this.create(id, {
-                title: title,
-                content: content,
-                size: 'large',
-                className: 'image-viewer-modal',
-                ...options
-            });
-        } else {
-            this.setTitle(id, title);
-            this.setContent(id, content);
-        }
-
-        this.open(id);
-    }
-
-    // Public API
-    getActiveModal() {
-        return this.activeModal;
-    }
-
-    getOpenModals() {
-        return [...this.modalStack];
-    }
-
-    getModal(id) {
-        return this.modals.get(id);
-    }
-
-    getAllModals() {
-        return Array.from(this.modals.keys());
-    }
-
-    destroy(id) {
-        const modal = this.modals.get(id);
+    // Destroy modal
+    destroy(modalId) {
+        const modal = document.getElementById(modalId);
         if (modal) {
-            // Close if open
-            if (modal.isOpen) {
-                this.close(id);
-            }
-
-            // Remove from DOM
-            if (modal.element && modal.element.parentNode) {
-                modal.element.parentNode.removeChild(modal.element);
-            }
-
-            // Remove from registry
-            this.modals.delete(id);
-
-            console.log(`Modal destroyed: ${id}`);
+            this.close(modalId);
+            setTimeout(() => {
+                if (modal.parentNode) {
+                    modal.parentNode.removeChild(modal);
+                }
+            }, 300);
         }
     }
 }
 
-// Initialize modal manager
-document.addEventListener('DOMContentLoaded', function() {
-    window.modalManager = new ModalManager();
-    console.log('Modal manager created and registered');
-});
+// Global modal functions
+window.openModal = function(modalId, options = {}) {
+    if (window.modalManager) {
+        return window.modalManager.open(modalId, options);
+    }
+    return false;
+};
+
+window.closeModal = function(modalId) {
+    if (window.modalManager) {
+        return window.modalManager.close(modalId);
+    }
+    return false;
+};
+
+window.showHelp = function() {
+    return window.openModal('helpModal');
+};
+
+window.hideHelp = function() {
+    return window.closeModal('helpModal');
+};
+
+window.showSearchHistory = function() {
+    return window.openModal('searchHistoryModal');
+};
+
+window.hideSearchHistory = function() {
+    return window.closeModal('searchHistoryModal');
+};
+
+window.openDocumentViewer = function(documentId) {
+    if (window.documentManager) {
+        return window.documentManager.openDocumentViewer(documentId);
+    }
+    return false;
+};
+
+window.closeDocumentViewer = function() {
+    return window.closeModal('documentViewerModal');
+};
+
+// Initialize modal manager immediately
+window.modalManager = new ModalManager();
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = ModalManager;
 }
 
+console.log('Modal manager loaded');

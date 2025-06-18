@@ -3,7 +3,7 @@
 
 class NotificationManager {
     constructor() {
-        this.notifications = new Map();
+        this.notifications = [];
         this.container = null;
         this.maxNotifications = 5;
         this.defaultDuration = 5000;
@@ -12,201 +12,60 @@ class NotificationManager {
 
     init() {
         console.log('Initializing Notification Manager...');
-        this.createContainer();
-        this.setupGlobalFunction();
-
-        // Register globally
+        this.setupContainer();
         window.notificationManager = this;
-
         console.log('Notification manager initialized');
     }
 
-    createContainer() {
-        // Check if container already exists
-        this.container = document.getElementById('notificationContainer');
-
+    setupContainer() {
+        this.container = document.getElementById('statusContainer');
         if (!this.container) {
+            // Create container if it doesn't exist
             this.container = document.createElement('div');
-            this.container.id = 'notificationContainer';
-            this.container.className = 'notification-container';
-            this.container.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 10000;
-                pointer-events: none;
-                max-width: 400px;
-            `;
+            this.container.id = 'statusContainer';
+            this.container.className = 'status-container';
             document.body.appendChild(this.container);
         }
     }
 
-    setupGlobalFunction() {
-        // Create global showStatus function
-        window.showStatus = (message, type = 'info', duration = this.defaultDuration) => {
-            return this.show(message, type, duration);
-        };
-    }
-
     show(message, type = 'info', duration = this.defaultDuration, options = {}) {
-        const id = this.generateId();
-
         const notification = {
-            id: id,
+            id: window.generateId('notification'),
             message: message,
             type: type,
             duration: duration,
-            timestamp: Date.now(),
+            timestamp: new Date(),
             options: options
         };
 
-        // Remove oldest notification if we're at the limit
-        if (this.notifications.size >= this.maxNotifications) {
-            const oldestId = Array.from(this.notifications.keys())[0];
-            this.remove(oldestId);
-        }
+        this.notifications.push(notification);
+        this.renderNotification(notification);
 
-        // Add to notifications map
-        this.notifications.set(id, notification);
-
-        // Create and show notification element
-        const element = this.createElement(notification);
-        this.container.appendChild(element);
-
-        // Auto-remove after duration (if duration > 0)
+        // Auto-remove after duration
         if (duration > 0) {
             setTimeout(() => {
-                this.remove(id);
+                this.remove(notification.id);
             }, duration);
         }
 
-        console.log(`Notification shown: [${type.toUpperCase()}] ${message}`);
-        return id;
-    }
-
-    createElement(notification) {
-        const { id, message, type, options } = notification;
-
-        const element = document.createElement('div');
-        element.id = `notification-${id}`;
-        element.className = `notification notification-${type}`;
-        element.style.cssText = `
-            background: ${this.getBackgroundColor(type)};
-            color: ${this.getTextColor(type)};
-            padding: 12px 16px;
-            margin-bottom: 8px;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            border-left: 4px solid ${this.getBorderColor(type)};
-            pointer-events: auto;
-            opacity: 0;
-            transform: translateX(100%);
-            transition: all 0.3s ease;
-            position: relative;
-            word-wrap: break-word;
-            max-width: 100%;
-        `;
-
-        // Create content
-        const content = document.createElement('div');
-        content.className = 'notification-content';
-        content.style.cssText = `
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-        `;
-
-        // Add icon
-        const icon = document.createElement('i');
-        icon.className = this.getIcon(type);
-        icon.style.cssText = `
-            margin-top: 2px;
-            flex-shrink: 0;
-        `;
-
-        // Add message
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'notification-message';
-        messageDiv.style.cssText = `
-            flex: 1;
-            line-height: 1.4;
-        `;
-        messageDiv.textContent = message;
-
-        // Add close button
-        const closeButton = document.createElement('button');
-        closeButton.className = 'notification-close';
-        closeButton.innerHTML = '×';
-        closeButton.style.cssText = `
-            background: none;
-            border: none;
-            color: inherit;
-            font-size: 18px;
-            cursor: pointer;
-            padding: 0;
-            margin-left: 8px;
-            opacity: 0.7;
-            flex-shrink: 0;
-        `;
-        closeButton.onclick = () => this.remove(id);
-
-        content.appendChild(icon);
-        content.appendChild(messageDiv);
-        content.appendChild(closeButton);
-        element.appendChild(content);
-
-        // Add progress bar for timed notifications
-        if (notification.duration > 0) {
-            const progressBar = document.createElement('div');
-            progressBar.className = 'notification-progress';
-            progressBar.style.cssText = `
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                height: 2px;
-                background: ${this.getBorderColor(type)};
-                width: 100%;
-                transform-origin: left;
-                animation: notificationProgress ${notification.duration}ms linear;
-            `;
-            element.appendChild(progressBar);
-
-            // Add CSS animation
-            if (!document.getElementById('notification-styles')) {
-                const style = document.createElement('style');
-                style.id = 'notification-styles';
-                style.textContent = `
-                    @keyframes notificationProgress {
-                        from { transform: scaleX(1); }
-                        to { transform: scaleX(0); }
-                    }
-                    .notification:hover .notification-progress {
-                        animation-play-state: paused;
-                    }
-                `;
-                document.head.appendChild(style);
-            }
+        // Limit number of notifications
+        if (this.notifications.length > this.maxNotifications) {
+            const oldestId = this.notifications[0].id;
+            this.remove(oldestId);
         }
 
-        // Animate in
-        setTimeout(() => {
-            element.style.opacity = '1';
-            element.style.transform = 'translateX(0)';
-        }, 10);
-
-        return element;
+        return notification.id;
     }
 
     remove(id) {
-        const notification = this.notifications.get(id);
-        if (!notification) return;
+        const index = this.notifications.findIndex(n => n.id === id);
+        if (index === -1) return;
 
-        const element = document.getElementById(`notification-${id}`);
+        const notification = this.notifications[index];
+        const element = document.getElementById(notification.id);
+
         if (element) {
-            // Animate out
-            element.style.opacity = '0';
-            element.style.transform = 'translateX(100%)';
-
+            element.style.animation = 'slideOutRight 0.3s ease-in-out';
             setTimeout(() => {
                 if (element.parentNode) {
                     element.parentNode.removeChild(element);
@@ -214,102 +73,154 @@ class NotificationManager {
             }, 300);
         }
 
-        this.notifications.delete(id);
+        this.notifications.splice(index, 1);
     }
 
-    removeAll() {
-        Array.from(this.notifications.keys()).forEach(id => {
-            this.remove(id);
-        });
-    }
+    renderNotification(notification) {
+        if (!this.container) return;
 
-    // Convenience methods
-    success(message, duration = this.defaultDuration) {
-        return this.show(message, 'success', duration);
-    }
+        const element = document.createElement('div');
+        element.id = notification.id;
+        element.className = `status-message status-${notification.type}`;
 
-    error(message, duration = 0) { // Errors don't auto-dismiss by default
-        return this.show(message, 'error', duration);
-    }
+        const icon = this.getIcon(notification.type);
+        const closeButton = notification.duration === 0 || notification.options.persistent ?
+            '<button class="status-close" onclick="window.notificationManager.remove(\'' + notification.id + '\')">&times;</button>' : '';
 
-    warning(message, duration = this.defaultDuration) {
-        return this.show(message, 'warning', duration);
-    }
+        element.innerHTML = `
+            <div class="status-icon">${icon}</div>
+            <div class="status-text">${window.escapeHtml(notification.message)}</div>
+            ${closeButton}
+        `;
 
-    info(message, duration = this.defaultDuration) {
-        return this.show(message, 'info', duration);
-    }
+        // Add click handler for actions
+        if (notification.options.action) {
+            element.style.cursor = 'pointer';
+            element.addEventListener('click', notification.options.action);
+        }
 
-    loading(message, duration = 0) {
-        return this.show(message, 'loading', duration);
-    }
+        this.container.appendChild(element);
 
-    // Utility methods
-    generateId() {
-        return Date.now().toString(36) + Math.random().toString(36).substr(2);
-    }
-
-    getBackgroundColor(type) {
-        const colors = {
-            success: '#d4edda',
-            error: '#f8d7da',
-            warning: '#fff3cd',
-            info: '#d1ecf1',
-            loading: '#e2e3e5'
-        };
-        return colors[type] || colors.info;
-    }
-
-    getTextColor(type) {
-        const colors = {
-            success: '#155724',
-            error: '#721c24',
-            warning: '#856404',
-            info: '#0c5460',
-            loading: '#383d41'
-        };
-        return colors[type] || colors.info;
-    }
-
-    getBorderColor(type) {
-        const colors = {
-            success: '#28a745',
-            error: '#dc3545',
-            warning: '#ffc107',
-            info: '#17a2b8',
-            loading: '#6c757d'
-        };
-        return colors[type] || colors.info;
+        // Trigger animation
+        setTimeout(() => {
+            element.style.animation = 'slideInRight 0.3s ease-out';
+        }, 10);
     }
 
     getIcon(type) {
         const icons = {
-            success: 'fas fa-check-circle',
-            error: 'fas fa-exclamation-triangle',
-            warning: 'fas fa-exclamation-circle',
-            info: 'fas fa-info-circle',
-            loading: 'fas fa-spinner fa-spin'
+            'info': '<i class="fas fa-info-circle"></i>',
+            'success': '<i class="fas fa-check-circle"></i>',
+            'warning': '<i class="fas fa-exclamation-triangle"></i>',
+            'error': '<i class="fas fa-times-circle"></i>',
+            'loading': '<i class="fas fa-spinner fa-spin"></i>'
         };
-        return icons[type] || icons.info;
+        return icons[type] || icons['info'];
     }
 
-    // Public API
-    getActiveNotifications() {
-        return Array.from(this.notifications.values());
+    // Convenience methods
+    info(message, duration, options) {
+        return this.show(message, 'info', duration, options);
     }
 
-    getNotificationCount() {
-        return this.notifications.size;
+    success(message, duration, options) {
+        return this.show(message, 'success', duration, options);
     }
 
-    setMaxNotifications(max) {
-        this.maxNotifications = max;
+    warning(message, duration, options) {
+        return this.show(message, 'warning', duration, options);
     }
 
-    setDefaultDuration(duration) {
-        this.defaultDuration = duration;
+    error(message, duration, options) {
+        return this.show(message, 'error', duration, options);
+    }
+
+    loading(message, options) {
+        return this.show(message, 'loading', 0, { persistent: true, ...options });
+    }
+
+    // Clear all notifications
+    clear() {
+        this.notifications.forEach(notification => {
+            this.remove(notification.id);
+        });
+    }
+
+    // Get all notifications
+    getAll() {
+        return [...this.notifications];
+    }
+
+    // Update existing notification
+    update(id, message, type) {
+        const notification = this.notifications.find(n => n.id === id);
+        if (!notification) return false;
+
+        notification.message = message;
+        if (type) notification.type = type;
+
+        const element = document.getElementById(id);
+        if (element) {
+            const textElement = element.querySelector('.status-text');
+            const iconElement = element.querySelector('.status-icon');
+
+            if (textElement) {
+                textElement.textContent = message;
+            }
+
+            if (iconElement && type) {
+                iconElement.innerHTML = this.getIcon(type);
+                element.className = `status-message status-${type}`;
+            }
+        }
+
+        return true;
     }
 }
+
+// Global notification function
+window.showStatus = function(message, type = 'info', duration = 5000, options = {}) {
+    if (window.notificationManager) {
+        return window.notificationManager.show(message, type, duration, options);
+    } else {
+        // Fallback to console if notification manager not available
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        return null;
+    }
+};
+
+// Additional global convenience functions
+window.showSuccess = function(message, duration = 3000, options = {}) {
+    return window.showStatus(message, 'success', duration, options);
+};
+
+window.showError = function(message, duration = 7000, options = {}) {
+    return window.showStatus(message, 'error', duration, options);
+};
+
+window.showWarning = function(message, duration = 5000, options = {}) {
+    return window.showStatus(message, 'warning', duration, options);
+};
+
+window.showInfo = function(message, duration = 4000, options = {}) {
+    return window.showStatus(message, 'info', duration, options);
+};
+
+window.showLoading = function(message, options = {}) {
+    return window.showStatus(message, 'loading', 0, { persistent: true, ...options });
+};
+
+window.hideNotification = function(id) {
+    if (window.notificationManager) {
+        window.notificationManager.remove(id);
+    }
+};
+
+window.clearNotifications = function() {
+    if (window.notificationManager) {
+        window.notificationManager.clear();
+    }
+};
 
 // Initialize notification manager immediately
 window.notificationManager = new NotificationManager();
@@ -318,3 +229,5 @@ window.notificationManager = new NotificationManager();
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = NotificationManager;
 }
+
+console.log('Notification manager loaded');

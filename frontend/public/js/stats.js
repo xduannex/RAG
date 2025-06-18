@@ -1,56 +1,104 @@
 // RAG Chat Application - Statistics Management
-// Handles loading and displaying application statistics
+// Handles application statistics and metrics
 
 class StatsManager {
     constructor(apiBaseUrl) {
-        this.apiBaseUrl = apiBaseUrl;
-        this.stats = {};
-        this.isLoading = false;
-        this.refreshInterval = null;
+        this.apiBaseUrl = apiBaseUrl || window.API_BASE_URL;
+        this.stats = {
+            totalDocuments: 0,
+            totalSearches: 0,
+            totalUploads: 0,
+            avgResponseTime: 0,
+            successRate: 0
+        };
         this.init();
     }
 
     init() {
         console.log('Initializing Stats Manager...');
         this.setupElements();
-
-        // Register globally
-        window.statsManager = this;
-
-        // Load initial stats
         this.loadStats();
-
-        // Set up auto-refresh (every 30 seconds)
-        this.startAutoRefresh(30000);
-
+        window.statsManager = this;
         console.log('Stats manager initialized');
     }
 
-    setupElements() {
-        this.elements = {
-            totalDocs: document.getElementById('totalDocs'),
-            totalSearches: document.getElementById('totalSearches'),
-            recentSearches: document.getElementById('recentSearches'),
-            processedDocs: document.getElementById('processedDocs'),
-            searchableDocs: document.getElementById('searchableDocs'),
-            avgResponseTime: document.getElementById('avgResponseTime'),
-            vectorStoreSize: document.getElementById('vectorStoreSize'),
-            lastUpdated: document.getElementById('lastUpdated')
-        };
+        setupElements() {
+        this.totalDocsElement = document.getElementById('totalDocs');
+        this.totalSearchesElement = document.getElementById('totalSearches');
+        this.totalUploadsElement = document.getElementById('totalUploads');
+        this.avgResponseTimeElement = document.getElementById('avgResponseTime');
+        this.successRateElement = document.getElementById('successRate');
     }
 
     async loadStats() {
-        if (this.isLoading) {
-            console.log('Stats already loading, skipping...');
-            return;
-        }
-
-        this.isLoading = true;
-        this.showLoadingState();
-
         try {
             console.log('Loading statistics...');
 
+            // Load from multiple sources
+            const [documentStats, searchStats, uploadStats] = await Promise.allSettled([
+                this.loadDocumentStats(),
+                this.loadSearchStats(),
+                this.loadUploadStats()
+            ]);
+
+            // Combine stats
+            this.stats = {
+                totalDocuments: documentStats.status === 'fulfilled' ? documentStats.value.total : 0,
+                totalSearches: searchStats.status === 'fulfilled' ? searchStats.value.total : 0,
+                totalUploads: uploadStats.status === 'fulfilled' ? uploadStats.value.total : 0,
+                avgResponseTime: searchStats.status === 'fulfilled' ? searchStats.value.avgResponseTime : 0,
+                successRate: searchStats.status === 'fulfilled' ? searchStats.value.successRate : 0
+            };
+
+            this.updateUI();
+            console.log('Statistics loaded:', this.stats);
+
+        } catch (error) {
+            console.error('Failed to load statistics:', error);
+            this.handleStatsError(error);
+        }
+    }
+
+    async loadDocumentStats() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/pdfs/stats/summary`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return {
+                total: data.total_documents || 0,
+                processed: data.processed_documents || 0,
+                failed: data.failed_documents || 0,
+                totalSize: data.total_size || 0
+            };
+        } catch (error) {
+            console.warn('Failed to load document stats:', error);
+            return { total: 0, processed: 0, failed: 0, totalSize: 0 };
+        }
+    }
+
+    async loadSearchStats() {
+        try {
+            // Get search stats from search manager if available
+            if (window.searchManager) {
+                const searchStats = window.searchManager.getSearchStats();
+                return {
+                    total: searchStats.totalSearches,
+                    successful: searchStats.successfulSearches,
+                    avgResponseTime: searchStats.avgResponseTime,
+                    successRate: searchStats.successRate
+                };
+            }
+
+            // Fallback to API
             const response = await fetch(`${this.apiBaseUrl}/search/stats`, {
                 method: 'GET',
                 headers: {
@@ -63,304 +111,130 @@ class StatsManager {
             }
 
             const data = await response.json();
-            console.log('Stats API response:', data);
-
-            this.stats = data;
-            this.updateStatsDisplay(data);
-
-            if (window.showStatus) {
-                window.showStatus('Statistics updated successfully', 'success', 3000);
-            }
-
+            return {
+                total: data.total_searches || 0,
+                successful: data.successful_searches || 0,
+                avgResponseTime: data.avg_response_time || 0,
+                successRate: data.success_rate || 0
+            };
         } catch (error) {
-            console.error('Failed to load stats:', error);
-            this.showErrorState(error.message);
-
-            if (window.showStatus) {
-                window.showStatus('Failed to load statistics: ' + error.message, 'error');
-            }
-        } finally {
-            this.isLoading = false;
+            console.warn('Failed to load search stats:', error);
+            return { total: 0, successful: 0, avgResponseTime: 0, successRate: 0 };
         }
     }
 
-    updateStatsDisplay(stats) {
+    async loadUploadStats() {
         try {
-            console.log('Updating stats display with:', stats);
-
-            // Basic document stats
-            this.updateElement('totalDocs', stats.total_documents || 0);
-            this.updateElement('processedDocs', stats.processed_documents || 0);
-            this.updateElement('searchableDocs', stats.searchable_documents || 0);
-
-            // Search stats
-            this.updateElement('totalSearches', stats.total_searches || 0);
-            this.updateElement('recentSearches', stats.recent_searches_24h || 0);
-
-            // Performance stats
-            if (stats.avg_response_time) {
-                this.updateElement('avgResponseTime', `${(stats.avg_response_time * 1000).toFixed(0)}ms`);
-            } else {
-                this.updateElement('avgResponseTime', 'N/A');
-            }
-
-            // Vector store stats
-            if (stats.vector_store) {
-                const vectorStats = stats.vector_store;
-                let vectorInfo = '';
-
-                if (vectorStats.total_chunks) {
-                    vectorInfo += `${vectorStats.total_chunks.toLocaleString()} chunks`;
+            const response = await fetch(`${this.apiBaseUrl}/documents/upload-stats`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
                 }
-                if (vectorStats.collection_size) {
-                    vectorInfo += vectorInfo ? `, ${this.formatBytes(vectorStats.collection_size)}` : this.formatBytes(vectorStats.collection_size);
-                }
+            });
 
-                this.updateElement('vectorStoreSize', vectorInfo || 'N/A');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            // Update last updated time
-            this.updateElement('lastUpdated', new Date().toLocaleTimeString());
-
-            // Update additional stats if elements exist
-            this.updateAdditionalStats(stats);
-
-            console.log('Stats display updated successfully');
-
+            const data = await response.json();
+            return {
+                total: data.total_uploads || 0,
+                successful: data.successful_uploads || 0,
+                failed: data.failed_uploads || 0,
+                totalSize: data.total_size_uploaded || 0
+            };
         } catch (error) {
-            console.error('Error updating stats display:', error);
+            console.warn('Failed to load upload stats:', error);
+            return { total: 0, successful: 0, failed: 0, totalSize: 0 };
         }
     }
 
-    updateAdditionalStats(stats) {
-        // Top queries
-        if (stats.top_queries && stats.top_queries.length > 0) {
-            this.updateTopQueries(stats.top_queries);
+    updateUI() {
+        // Update total documents
+        if (this.totalDocsElement) {
+            this.totalDocsElement.textContent = window.formatNumber(this.stats.totalDocuments);
         }
 
-        // Document types breakdown
-        if (stats.document_types) {
-            this.updateDocumentTypes(stats.document_types);
+        // Update total searches
+        if (this.totalSearchesElement) {
+            this.totalSearchesElement.textContent = window.formatNumber(this.stats.totalSearches);
         }
 
-        // Recent activity
-        if (stats.recent_activity) {
-            this.updateRecentActivity(stats.recent_activity);
+        // Update other stats if elements exist
+        if (this.totalUploadsElement) {
+            this.totalUploadsElement.textContent = window.formatNumber(this.stats.totalUploads);
         }
 
-        // System health
-        if (stats.system_health) {
-            this.updateSystemHealth(stats.system_health);
+        if (this.avgResponseTimeElement) {
+            this.avgResponseTimeElement.textContent = `${(this.stats.avgResponseTime * 1000).toFixed(0)}ms`;
         }
-    }
 
-    updateTopQueries(topQueries) {
-        const container = document.getElementById('topQueries');
-        if (!container) return;
-
-        const queriesHTML = topQueries.slice(0, 5).map((query, index) => `
-            <div class="top-query-item">
-                <span class="query-rank">${index + 1}</span>
-                <span class="query-text">${this.escapeHtml(query.query)}</span>
-                <span class="query-count">${query.count}</span>
-            </div>
-        `).join('');
-
-        container.innerHTML = `
-            <div class="top-queries-list">
-                ${queriesHTML}
-            </div>
-        `;
-    }
-
-    updateDocumentTypes(documentTypes) {
-        const container = document.getElementById('documentTypes');
-        if (!container) return;
-
-        const typesHTML = Object.entries(documentTypes).map(([type, count]) => `
-            <div class="doc-type-item">
-                <span class="doc-type-name">${type.toUpperCase()}</span>
-                <span class="doc-type-count">${count}</span>
-            </div>
-        `).join('');
-
-        container.innerHTML = `
-            <div class="doc-types-list">
-                ${typesHTML}
-            </div>
-        `;
-    }
-
-    updateRecentActivity(recentActivity) {
-        const container = document.getElementById('recentActivity');
-        if (!container) return;
-
-        const activitiesHTML = recentActivity.slice(0, 10).map(activity => `
-            <div class="activity-item">
-                <span class="activity-type">${activity.type}</span>
-                <span class="activity-description">${this.escapeHtml(activity.description)}</span>
-                <span class="activity-time">${this.formatRelativeTime(activity.timestamp)}</span>
-            </div>
-        `).join('');
-
-        container.innerHTML = `
-            <div class="recent-activities-list">
-                ${activitiesHTML}
-            </div>
-        `;
-    }
-
-    updateSystemHealth(systemHealth) {
-        const container = document.getElementById('systemHealth');
-        if (!container) return;
-
-        const healthItems = Object.entries(systemHealth).map(([service, status]) => {
-            const statusClass = status === 'healthy' ? 'success' :
-                               status === 'degraded' ? 'warning' : 'danger';
-
-            return `
-                <div class="health-item">
-                    <span class="health-service">${service}</span>
-                    <span class="health-status status-${statusClass}">${status}</span>
-                </div>
-            `;
-        }).join('');
-
-        container.innerHTML = `
-            <div class="system-health-list">
-                ${healthItems}
-            </div>
-        `;
-    }
-
-    updateElement(elementId, value) {
-        const element = this.elements[elementId] || document.getElementById(elementId);
-        if (element) {
-            if (typeof value === 'number') {
-                element.textContent = value.toLocaleString();
-            } else {
-                element.textContent = String(value);
-            }
+        if (this.successRateElement) {
+            this.successRateElement.textContent = `${this.stats.successRate.toFixed(1)}%`;
         }
     }
 
-    showLoadingState() {
-        Object.values(this.elements).forEach(element => {
-            if (element) {
-                element.textContent = '...';
-            }
-        });
-    }
+    handleStatsError(error) {
+        console.error('Stats error:', error);
 
-    showErrorState(errorMessage) {
-        Object.values(this.elements).forEach(element => {
-            if (element) {
-                element.textContent = '?';
-                element.title = `Error loading stats: ${errorMessage}`;
-            }
-        });
-    }
-
-    startAutoRefresh(interval = 30000) {
-        if (this.refreshInterval) {
-            clearInterval(this.refreshInterval);
+        // Show fallback values
+        if (this.totalDocsElement) {
+            this.totalDocsElement.textContent = '-';
         }
-
-        this.refreshInterval = setInterval(() => {
-            if (!document.hidden) { // Only refresh if page is visible
-                this.loadStats();
-            }
-        }, interval);
-
-        console.log(`Auto-refresh started with ${interval}ms interval`);
-    }
-
-    stopAutoRefresh() {
-        if (this.refreshInterval) {
-            clearInterval(this.refreshInterval);
-            this.refreshInterval = null;
-            console.log('Auto-refresh stopped');
+        if (this.totalSearchesElement) {
+            this.totalSearchesElement.textContent = '-';
+        }
+        if (this.totalUploadsElement) {
+            this.totalUploadsElement.textContent = '-';
+        }
+        if (this.avgResponseTimeElement) {
+            this.avgResponseTimeElement.textContent = '-';
+        }
+        if (this.successRateElement) {
+            this.successRateElement.textContent = '-';
         }
     }
 
-    // Utility methods
-    formatBytes(bytes) {
-        if (!bytes || isNaN(bytes)) return '0 B';
-
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    // Increment counters for local tracking
+    incrementDocumentCount() {
+        this.stats.totalDocuments++;
+        this.updateUI();
     }
 
-    formatRelativeTime(timestamp) {
-        try {
-            const now = new Date();
-            const time = new Date(timestamp);
-            const diffMs = now - time;
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-
-            if (diffMins < 1) return 'Just now';
-            if (diffMins < 60) return `${diffMins}m ago`;
-            if (diffHours < 24) return `${diffHours}h ago`;
-            if (diffDays < 7) return `${diffDays}d ago`;
-            return time.toLocaleDateString();
-        } catch (error) {
-            return 'Unknown';
-        }
+    incrementSearchCount() {
+        this.stats.totalSearches++;
+        this.updateUI();
     }
 
-    escapeHtml(text) {
-        if (!text) return '';
-        try {
-            const div = document.createElement('div');
-            div.textContent = String(text);
-            return div.innerHTML;
-        } catch (error) {
-            return String(text);
-        }
+    incrementUploadCount() {
+        this.stats.totalUploads++;
+        this.updateUI();
+    }
+
+    updateResponseTime(responseTime) {
+        // Simple moving average
+        const alpha = 0.1; // Smoothing factor
+        this.stats.avgResponseTime = this.stats.avgResponseTime * (1 - alpha) + responseTime * alpha;
+        this.updateUI();
     }
 
     // Public API methods
     getStats() {
-        return this.stats;
+        return { ...this.stats };
     }
 
-    refresh() {
-        return this.loadStats();
-    }
-
-    isRefreshing() {
-        return this.isLoading;
-    }
-
-    setAutoRefreshInterval(interval) {
-        this.startAutoRefresh(interval);
+    async refreshStats() {
+        await this.loadStats();
     }
 }
 
 // Initialize stats manager when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    if (typeof API_BASE_URL !== 'undefined') {
-        window.statsManager = new StatsManager(API_BASE_URL);
+    if (window.API_BASE_URL) {
+        window.statsManager = new StatsManager(window.API_BASE_URL);
         console.log('Stats manager created and registered');
     } else {
         console.error('API_BASE_URL not defined, cannot initialize stats manager');
-    }
-});
-
-// Stop auto-refresh when page is hidden to save resources
-document.addEventListener('visibilitychange', function() {
-    if (window.statsManager) {
-        if (document.hidden) {
-            console.log('Page hidden, pausing stats refresh');
-        } else {
-            console.log('Page visible, resuming stats refresh');
-            // Refresh immediately when page becomes visible
-            window.statsManager.loadStats();
-        }
     }
 });
 
@@ -368,3 +242,6 @@ document.addEventListener('visibilitychange', function() {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = StatsManager;
 }
+
+console.log('Stats manager loaded');
+
