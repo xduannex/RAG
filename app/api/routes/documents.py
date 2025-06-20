@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import JSONResponse
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -135,42 +135,86 @@ async def list_documents(
     """List all documents with optional filtering"""
 
     try:
-        query = db.query(Document)
+        # Build WHERE clause
+        where_conditions = []
+        params = {}
 
-        # Apply filters
         if file_type:
-            query = query.filter(Document.file_type == file_type)
+            where_conditions.append("file_type = :file_type")
+            params["file_type"] = file_type
         if category:
-            query = query.filter(Document.category == category)
+            where_conditions.append("category = :category")
+            params["category"] = category
         if status:
-            query = query.filter(Document.status == status)
+            where_conditions.append("status = :status")
+            params["status"] = status
 
-        # Get total count
-        total = query.count()
+        where_clause = " WHERE " + " AND ".join(where_conditions) if where_conditions else ""
 
-        # Apply pagination
-        documents = query.offset(skip).limit(limit).all()
+        # Count query
+        count_sql = f"SELECT COUNT(*) as total FROM documents{where_clause}"
+        count_result = db.execute(text(count_sql), params).fetchone()
+        total = count_result.total if count_result else 0
 
-        # Format response
+        # Main query
+        params.update({"skip": skip, "limit": limit})
+        main_sql = f"""
+        SELECT 
+            id,
+            filename,
+            original_filename,
+            file_type,
+            file_size,
+            title,
+            category,
+            description,
+            status,
+            processing_status,
+            created_at,
+            processed_at,
+            word_count,
+            total_chunks
+        FROM documents
+        {where_clause}
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :skip
+        """
+
+        results = db.execute(text(main_sql), params).fetchall()
+
+        # Convert to list of dictionaries
         document_list = []
-        for doc in documents:
-            document_list.append({
-                "id": doc.id,
-                "filename": doc.original_filename,
-                "file_type": doc.file_type,
-                "file_size": doc.file_size,
-                "title": doc.title,
-                "category": doc.category,
-                "description": doc.description,
-                "status": doc.status,
-                "processing_status": doc.processing_status,
-                "is_processed": doc.is_processed,
-                "created_at": doc.created_at.isoformat() if doc.created_at else None,
-                "processed_at": doc.processed_at.isoformat() if doc.processed_at else None,
-                "word_count": doc.word_count,
-                "total_chunks": doc.total_chunks,
-                "metadata": doc.metadata
-            })
+        for row in results:
+            # Calculate is_processed based on processing_status
+            is_processed = row.processing_status == "completed" if row.processing_status else False
+
+            # Handle datetime fields - they might already be strings
+            created_at = row.created_at
+            if hasattr(row.created_at, 'isoformat'):
+                created_at = row.created_at.isoformat()
+
+            processed_at = row.processed_at
+            if hasattr(row.processed_at, 'isoformat'):
+                processed_at = row.processed_at.isoformat()
+
+            doc_dict = {
+                "id": row.id,
+                "filename": row.original_filename or row.filename or "Unknown",
+                "file_type": row.file_type,
+                "file_size": row.file_size,
+                "title": row.title,
+                "category": row.category,
+                "description": row.description,
+                "status": row.status,
+                "processing_status": row.processing_status,
+                "is_processed": is_processed,
+                "created_at": created_at,
+                "processed_at": processed_at,
+                "word_count": row.word_count,
+                "total_chunks": row.total_chunks,
+                "metadata": {}
+            }
+            document_list.append(doc_dict)
 
         return {
             "documents": document_list,
@@ -186,6 +230,8 @@ async def list_documents(
 
     except Exception as e:
         logger.error(f"Error listing documents: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
 
 

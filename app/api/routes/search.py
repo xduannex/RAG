@@ -1,3 +1,4 @@
+import os
 import time
 import traceback
 
@@ -6,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from fastapi.requests import Request
 import logging
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 try:
@@ -52,10 +54,18 @@ def get_services(request: Request):
 @router.post("/search")
 async def search_documents(
         search_request: SearchRequest,
-        request: Request
+        request: Request,
+        db: Session = Depends(get_db)
 ):
-    """Search documents without RAG generation"""
+    """Search documents without RAG generation - Enhanced with document viewing support"""
+    start_time = time.time()
+
     try:
+        if not search_request.query or not search_request.query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+        logger.info(f"Search request: '{search_request.query}' with n_results: {search_request.n_results}")
+
         services = get_services(request)
         chroma_service = services["chroma_service"]
 
@@ -67,34 +77,165 @@ async def search_documents(
             await chroma_service.initialize()
 
         # Perform search directly with ChromaDB
-        results = await chroma_service.search_documents(
+        chroma_results = await chroma_service.search_documents(
             query=search_request.query,
             n_results=search_request.n_results,
             pdf_ids=search_request.pdf_ids,
             similarity_threshold=search_request.similarity_threshold
         )
 
+        logger.info(f"📊 Found {len(chroma_results)} ChromaDB results")
+
+        if not chroma_results:
+            return {
+                "success": True,
+                "query": search_request.query,
+                "results": [],
+                "total": 0,
+                "response_time": time.time() - start_time,
+                "message": "No documents found matching your search query",
+                "parameters": {
+                    "n_results": search_request.n_results,
+                    "similarity_threshold": search_request.similarity_threshold,
+                    "pdf_ids": search_request.pdf_ids
+                }
+            }
+
+        # Step 2: Extract document IDs and enrich with database information
+        document_ids = set()
+        for result in chroma_results:
+            # Extract document ID from chunk ID or metadata
+            doc_id = result.get('document_id')
+            if not doc_id and 'chunk_id' in result:
+                # Extract from chunk_id like "doc_1_chunk_0"
+                import re
+                match = re.match(r'doc_(\d+)_chunk_\d+', result['chunk_id'])
+                if match:
+                    doc_id = int(match.group(1))
+            elif not doc_id and 'id' in result:
+                # Extract from id field
+                import re
+                match = re.match(r'doc_(\d+)_chunk_\d+', result['id'])
+                if match:
+                    doc_id = int(match.group(1))
+
+            if doc_id:
+                document_ids.add(doc_id)
+
+        # Step 3: Get document information from database
+        documents_info = {}
+        if document_ids:
+            documents = db.query(Document).filter(Document.id.in_(document_ids)).all()
+            for doc in documents:
+                documents_info[doc.id] = {
+                    'id': doc.id,
+                    'filename': doc.filename,
+                    'original_filename': doc.original_filename,
+                    'title': doc.title,
+                    'author': doc.author,
+                    'category': doc.category,
+                    'file_type': doc.file_type,
+                    'total_pages': doc.total_pages,
+                    'file_size': doc.file_size,
+                    'created_at': doc.created_at.isoformat() if doc.created_at else None,
+                    'processed_at': doc.processed_at.isoformat() if doc.processed_at else None,
+                    'file_path': doc.file_path,
+                    'status': doc.status,
+                    'processing_status': doc.processing_status
+                }
+
+        # Step 4: Enrich ChromaDB results with database information
+        enriched_results = []
+        for result in chroma_results:
+            # Extract document ID
+            doc_id = result.get('document_id')
+            if not doc_id:
+                # Try to extract from chunk_id or id
+                chunk_id = result.get('chunk_id') or result.get('id', '')
+                import re
+                match = re.match(r'doc_(\d+)_chunk_\d+', chunk_id)
+                if match:
+                    doc_id = int(match.group(1))
+
+            # Get document info from database
+            doc_info = documents_info.get(doc_id, {})
+
+            # Create enriched result
+            enriched_result = {
+                'document_id': doc_id,
+                'chunk_id': result.get('chunk_id') or result.get('id'),
+                'content': result.get('content', ''),
+                'similarity_score': result.get('similarity_score', 0),
+                'chunk_index': result.get('chunk_index', 0),
+                'page_number': result.get('page_number', 0),
+                # Database information for document viewing
+                'filename': doc_info.get('filename', 'Unknown'),
+                'original_filename': doc_info.get('original_filename', 'Unknown'),
+                'title': doc_info.get('title', ''),
+                'author': doc_info.get('author', ''),
+                'category': doc_info.get('category', ''),
+                'file_type': doc_info.get('file_type', ''),
+                'total_pages': doc_info.get('total_pages', 0),
+                'file_size': doc_info.get('file_size', 0),
+                'created_at': doc_info.get('created_at'),
+                'processed_at': doc_info.get('processed_at'),
+                'status': doc_info.get('status', ''),
+                'processing_status': doc_info.get('processing_status', ''),
+                # Document viewing support
+                'can_view': bool(doc_info.get('file_path') and os.path.exists(doc_info.get('file_path', ''))),
+                'view_url': f"/documents/{doc_id}/view" if doc_id else None,
+                'download_url': f"/pdf/{doc_id}/download" if doc_id else None,
+                'display_name': doc_info.get('title') or doc_info.get('original_filename') or doc_info.get(
+                    'filename') or f"Document {doc_id}"
+            }
+            enriched_results.append(enriched_result)
+
+        logger.info(f"📋 Enriched {len(enriched_results)} results with database info")
+
         # Format response
         response = {
             "success": True,
             "query": search_request.query,
-            "results": results,
-            "total": len(results),
+            "results": enriched_results,
+            "total": len(enriched_results),
+            "response_time": time.time() - start_time,
             "parameters": {
                 "n_results": search_request.n_results,
                 "similarity_threshold": search_request.similarity_threshold,
                 "pdf_ids": search_request.pdf_ids
+            },
+            # Additional metadata for document viewing
+            "unique_documents": len(document_ids),
+            "document_summary": {
+                doc_id: {
+                    "title": info.get('title') or info.get('original_filename', 'Unknown'),
+                    "total_matches": len([r for r in enriched_results if r['document_id'] == doc_id]),
+                    "file_type": info.get('file_type', ''),
+                    "can_view": bool(info.get('file_path') and os.path.exists(info.get('file_path', ''))),
+                    "view_url": f"/documents/{doc_id}/view"
+                }
+                for doc_id, info in documents_info.items()
             }
         }
 
-        # Save search query (optional)
+        # Log to database
         try:
-            await rag_service.save_search_query(
+            search_history = SearchHistory(
                 query=search_request.query,
-                results_count=len(results)
+                query_type="search",
+                query_hash=hash(search_request.query),
+                results_count=len(enriched_results),
+                top_score=max([s.get("similarity_score", 0) for s in enriched_results]) if enriched_results else 0,
+                avg_score=sum([s.get("similarity_score", 0) for s in enriched_results]) / len(
+                    enriched_results) if enriched_results else 0,
+                response_time=response["response_time"],
+                model_used="search_only",
+                generated_answer=""
             )
+            db.add(search_history)
+            db.commit()
         except Exception as e:
-            logger.warning(f"Could not save search query: {e}")
+            logger.warning(f"Failed to log search history: {e}")
 
         return response
 
@@ -240,7 +381,7 @@ async def find_similar_documents(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/suggestions")
+@router.post("/suggestions")
 async def get_search_suggestions(
         request: Request,
         query: str,
@@ -302,7 +443,7 @@ async def get_search_suggestions(
         return {"suggestions": []}
 
 
-@router.post("/advanced")
+@router.get("/advanced")
 async def advanced_search(
         request_data: Dict[str, Any],
         request: Request
@@ -515,7 +656,6 @@ async def rag_search(
     start_time = time.time()
 
     try:
-        # Use max_results if provided, otherwise fall back to n_results
         max_results = request.max_results or request.n_results
 
         logger.info(f"RAG search request: '{request.query}' with max_results: {max_results}")
@@ -532,10 +672,10 @@ async def rag_search(
         if not chroma_service.is_initialized:
             await chroma_service.initialize()
 
-        # Step 1: Search for relevant documents
+        # Step 1: Search for relevant documents in ChromaDB
         logger.info(f"🔍 Searching ChromaDB for: '{request.query}'")
 
-        search_results = await chroma_service.search_documents(
+        chroma_results = await chroma_service.search_documents(
             query=request.query,
             n_results=max_results,
             pdf_ids=request.document_ids or request.pdf_ids,
@@ -543,9 +683,9 @@ async def rag_search(
             similarity_threshold=request.similarity_threshold
         )
 
-        logger.info(f"📊 Found {len(search_results)} search results")
+        logger.info(f"📊 Found {len(chroma_results)} ChromaDB results")
 
-        if not search_results:
+        if not chroma_results:
             return {
                 "success": True,
                 "query": request.query,
@@ -556,14 +696,89 @@ async def rag_search(
                 "context": "No relevant documents found"
             }
 
-        # Step 2: Generate answer using Ollama (if available)
+        # Step 2: Extract document IDs and enrich with database information
+        document_ids = set()
+        for result in chroma_results:
+            # Extract document ID from chunk ID or metadata
+            doc_id = result.get('document_id')
+            if not doc_id and 'chunk_id' in result:
+                # Extract from chunk_id like "doc_1_chunk_0"
+                import re
+                match = re.match(r'doc_(\d+)_chunk_\d+', result['chunk_id'])
+                if match:
+                    doc_id = int(match.group(1))
+            elif not doc_id and 'id' in result:
+                # Extract from id field
+                import re
+                match = re.match(r'doc_(\d+)_chunk_\d+', result['id'])
+                if match:
+                    doc_id = int(match.group(1))
+
+            if doc_id:
+                document_ids.add(doc_id)
+
+        # Step 3: Get document information from database
+        documents_info = {}
+        if document_ids:
+            documents = db.query(Document).filter(Document.id.in_(document_ids)).all()
+            for doc in documents:
+                documents_info[doc.id] = {
+                    'id': doc.id,
+                    'filename': doc.filename,
+                    'original_filename': doc.original_filename,
+                    'title': doc.title,
+                    'author': doc.author,
+                    'category': doc.category,
+                    'file_type': doc.file_type,
+                    'total_pages': doc.total_pages
+                }
+
+        # Step 4: Enrich ChromaDB results with database information
+        enriched_results = []
+        for result in chroma_results:
+            # Extract document ID
+            doc_id = result.get('document_id')
+            if not doc_id:
+                # Try to extract from chunk_id or id
+                chunk_id = result.get('chunk_id') or result.get('id', '')
+                import re
+                match = re.match(r'doc_(\d+)_chunk_\d+', chunk_id)
+                if match:
+                    doc_id = int(match.group(1))
+
+            # Get document info from database
+            doc_info = documents_info.get(doc_id, {})
+
+            # Create enriched result
+            enriched_result = {
+                'document_id': doc_id,
+                'chunk_id': result.get('chunk_id') or result.get('id'),
+                'content': result.get('content', ''),
+                'similarity_score': result.get('similarity_score', 0),
+                'chunk_index': result.get('chunk_index', 0),
+                'page_number': result.get('page_number', 0),
+                # Database information
+                'filename': doc_info.get('filename', 'Unknown'),
+                'original_filename': doc_info.get('original_filename', 'Unknown'),
+                'title': doc_info.get('title', ''),
+                'author': doc_info.get('author', ''),
+                'category': doc_info.get('category', ''),
+                'file_type': doc_info.get('file_type', ''),
+                'total_pages': doc_info.get('total_pages', 0)
+            }
+            enriched_results.append(enriched_result)
+
+        logger.info(f"📋 Enriched {len(enriched_results)} results with database info")
+
+        # Step 5: Generate answer using Ollama (if available)
         if ollama_service:
             try:
                 # Prepare context from search results
                 context_parts = []
-                for i, result in enumerate(search_results[:3]):  # Use top 3 results
+                for i, result in enumerate(enriched_results[:3]):  # Use top 3 results
+                    filename = result.get('original_filename') or result.get('filename', 'Unknown')
                     context_parts.append(
-                        f"Source {i + 1} (from {result.get('filename', 'Unknown')}): {result.get('content', '')}")
+                        f"Source {i + 1} (from {filename}): {result.get('content', '')}")
 
                 context = "\n\n".join(context_parts)
 
@@ -592,13 +807,13 @@ Answer:"""
         else:
             answer = "Found relevant documents but answer generation is not available. Please review the source documents below."
 
-        # Step 3: Format response
+        # Step 6: Format response
         response = {
             "success": True,
             "query": request.query,
             "answer": answer,
-            "sources": search_results,
-            "total_sources": len(search_results),
+            "sources": enriched_results,  # Now includes database info
+            "total_sources": len(enriched_results),
             "response_time": time.time() - start_time,
             "model_used": request.model,
             "parameters": {
@@ -612,9 +827,9 @@ Answer:"""
         # Add context if requested
         if request.include_context:
             context_parts = []
-            for result in search_results:
+            for result in enriched_results:
                 context_parts.append({
-                    "source": result.get('filename', 'Unknown'),
+                    "source": result.get('original_filename') or result.get('filename', 'Unknown'),
                     "content": result.get('content', ''),
                     "similarity": result.get('similarity_score', 0)
                 })
@@ -626,10 +841,10 @@ Answer:"""
                 query=request.query,
                 query_type="rag",
                 query_hash=hash(request.query),
-                results_count=len(search_results),
-                top_score=max([s.get("similarity_score", 0) for s in search_results]) if search_results else 0,
-                avg_score=sum([s.get("similarity_score", 0) for s in search_results]) / len(
-                    search_results) if search_results else 0,
+                results_count=len(enriched_results),
+                top_score=max([s.get("similarity_score", 0) for s in enriched_results]) if enriched_results else 0,
+                avg_score=sum([s.get("similarity_score", 0) for s in enriched_results]) / len(
+                    enriched_results) if enriched_results else 0,
                 response_time=response["response_time"],
                 model_used=request.model,
                 generated_answer=answer[:1000] if answer else ""
@@ -646,5 +861,75 @@ Answer:"""
         import traceback
         logger.error(f"RAG traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"RAG query failed: {str(e)}")
+
+
+def get_document_info_from_chunk_id(chunk_id: str, db: Session) -> dict:
+    """Get complete document and chunk information from chunk ID"""
+
+    try:
+        # Query to join chunks and documents tables
+        query = text("""
+                     SELECT
+                         -- Document fields
+                         d.id         as document_id,
+                         d.filename,
+                         d.original_filename,
+                         d.file_path,
+                         d.file_type,
+                         d.file_size,
+                         d.title,
+                         d.author,
+                         d.category,
+                         d.total_pages,
+                         d.word_count as doc_word_count,
+                         d.char_count as doc_char_count,
+                         d.language,
+                         d.created_at,
+                         -- Chunk fields
+                         c.id         as chunk_id,
+                         c.chunk_index,
+                         c.page_number,
+                         c.word_count as chunk_word_count,
+                         c.char_count as chunk_char_count,
+                         c.start_char,
+                         c.end_char
+                     FROM chunks c
+                              JOIN documents d ON c.document_id = d.id
+                     WHERE c.id = :chunk_id LIMIT 1
+                     """)
+
+        result = db.execute(query, {"chunk_id": chunk_id}).fetchone()
+
+        if result:
+            return {
+                "document_id": result.document_id,
+                "filename": result.filename,
+                "original_filename": result.original_filename,
+                "file_path": result.file_path,
+                "file_type": result.file_type,
+                "file_size": result.file_size,
+                "title": result.title,
+                "author": result.author,
+                "category": result.category,
+                "total_pages": result.total_pages,
+                "word_count": result.doc_word_count,
+                "char_count": result.doc_char_count,
+                "language": result.language,
+                "created_at": result.created_at,
+                "chunk_index": result.chunk_index,
+                "page_number": result.page_number,
+                "chunk_word_count": result.chunk_word_count,
+                "chunk_char_count": result.chunk_char_count,
+                "start_char": result.start_char,
+                "end_char": result.end_char
+            }
+        else:
+            logger.warning(f"No document found for chunk_id: {chunk_id}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Database error getting document info for chunk {chunk_id}: {e}")
+        return None
+
 
 

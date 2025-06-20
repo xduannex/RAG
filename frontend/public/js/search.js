@@ -123,33 +123,27 @@ class SearchManager {
     }
 
     async fetchSearchSuggestions(query) {
-        try {
-            this.isSearching = true;
+    try {
+        this.isSearching = true;
 
-            const response = await fetch(`${this.apiBaseUrl}/search/suggestions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    query: query,
-                    limit: 5,
-                    include_history: true,
-                    filters: this.currentFilters
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.searchSuggestions = data.suggestions || [];
-                this.showSuggestions(query);
+        const response = await fetch(`${this.apiBaseUrl}/search/suggestions?query=${encodeURIComponent(query)}&limit=5`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
             }
-        } catch (error) {
-            console.error('Failed to fetch search suggestions:', error);
-        } finally {
-            this.isSearching = false;
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            this.searchSuggestions = data.suggestions || [];
+            this.showSuggestions(query);
         }
+    } catch (error) {
+        console.error('Failed to fetch search suggestions:', error);
+    } finally {
+        this.isSearching = false;
     }
+}
 
     showSuggestions(query) {
         const container = document.querySelector('.chat-input-container');

@@ -27,6 +27,7 @@ class Document(Base):
     description = Column(Text)
     keywords = Column(Text)
 
+
     # Processing info
     total_pages = Column(Integer)
     total_chunks = Column(Integer, default=0)

@@ -28,9 +28,21 @@ class NotificationManager {
         }
     }
 
+    // Generate unique ID function
+    generateId(prefix = 'notification') {
+        return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    // Escape HTML function
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     show(message, type = 'info', duration = this.defaultDuration, options = {}) {
         const notification = {
-            id: window.generateId('notification'),
+            id: this.generateId('notification'),
             message: message,
             type: type,
             duration: duration,
@@ -89,7 +101,7 @@ class NotificationManager {
 
         element.innerHTML = `
             <div class="status-icon">${icon}</div>
-            <div class="status-text">${window.escapeHtml(notification.message)}</div>
+            <div class="status-text">${this.escapeHtml(notification.message)}</div>
             ${closeButton}
         `;
 
@@ -114,6 +126,17 @@ class NotificationManager {
             'warning': '<i class="fas fa-exclamation-triangle"></i>',
             'error': '<i class="fas fa-times-circle"></i>',
             'loading': '<i class="fas fa-spinner fa-spin"></i>'
+        };
+        return icons[type] || icons['info'];
+    }
+
+    getStatusIcon(type) {
+        const icons = {
+            'info': 'info-circle',
+            'success': 'check-circle',
+            'warning': 'exclamation-triangle',
+            'error': 'times-circle',
+            'loading': 'spinner fa-spin'
         };
         return icons[type] || icons['info'];
     }
@@ -176,6 +199,79 @@ class NotificationManager {
 
         return true;
     }
+
+    // Standalone status function (for backward compatibility)
+    showStatus(message, type = 'info', duration = 3000) {
+        // Remove existing status
+        const existingStatus = document.querySelector('.status-message');
+        if (existingStatus) {
+            existingStatus.remove();
+        }
+
+        // Create status element
+        const statusEl = document.createElement('div');
+        statusEl.className = `status-message status-${type}`;
+        statusEl.innerHTML = `
+            <div class="status-content">
+                <i class="fas fa-${this.getStatusIcon(type)}"></i>
+                <span>${this.escapeHtml(message)}</span>
+            </div>
+        `;
+
+        // Add styles
+        statusEl.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10001;
+            padding: 12px 20px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            max-width: 400px;
+            word-wrap: break-word;
+        `;
+
+        // Set background color based on type
+        const colors = {
+            success: '#28a745',
+            error: '#dc3545',
+            warning: '#ffc107',
+            info: '#17a2b8'
+        };
+        statusEl.style.backgroundColor = colors[type] || colors.info;
+
+        // Add to page
+        document.body.appendChild(statusEl);
+
+        // Animate in
+        setTimeout(() => {
+            statusEl.style.transform = 'translateX(0)';
+        }, 100);
+
+        // Auto remove
+        setTimeout(() => {
+            statusEl.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (statusEl.parentNode) {
+                    statusEl.parentNode.removeChild(statusEl);
+                }
+            }, 300);
+        }, duration);
+
+        // Click to dismiss
+        statusEl.addEventListener('click', () => {
+            statusEl.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (statusEl.parentNode) {
+                    statusEl.parentNode.removeChild(statusEl);
+                }
+            }, 300);
+        });
+    }
 }
 
 // Global notification function
@@ -222,8 +318,15 @@ window.clearNotifications = function() {
     }
 };
 
-// Initialize notification manager immediately
-window.notificationManager = new NotificationManager();
+// Initialize notification manager when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        window.notificationManager = new NotificationManager();
+    });
+} else {
+    // DOM is already ready
+    window.notificationManager = new NotificationManager();
+}
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {

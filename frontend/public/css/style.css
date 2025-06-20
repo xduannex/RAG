@@ -164,11 +164,10 @@ body {
 }
 
 .chat-section {
-    height: calc(100vh - 120px); /* Increased from 200px to 120px for more space */
+    height: calc(100vh - 120px); /* 120px = height of header + footer */
     display: flex;
     flex-direction: column;
-    margin-bottom: 0;
-    min-height: 600px; /* Add minimum height */
+    margin: 0;
 }
 
 .section-header {
@@ -1732,5 +1731,194 @@ kbd {
 @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0.3; }
+}
+
+/* Document Viewer Modal Styles */
+.modal-large .modal-content {
+    width: 90%;
+    max-width: 1200px;
+    height: 90vh;
+    max-height: 800px;
+}
+
+.modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body {
+    height: calc(100% - 60px);
+    overflow: hidden;
+}
+
+/* Main document viewer content container */
+#documentViewerContent {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+/* Ensure all child containers fill the space */
+#documentViewerContent > * {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+}
+
+/* Specific styling for different content types */
+#documentViewerContent #documentViewerIframe {
+    border: none;
+    background: #ffffff;
+    min-height: 500px;
+}
+
+#documentViewerContent #documentTextContainer {
+    overflow-y: auto;
+    padding: 0;
+    background: #ffffff;
+}
+
+#documentViewerContent #documentImageContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8f9fa;
+    overflow: auto;
+}
+
+/* Fix loading overlay z-index and positioning */
+#documentViewerLoading {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 1000 !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(2px);
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#documentViewerError {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 1001 !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(2px);
+}
+
+/* Ensure iframe has lower z-index */
+#documentViewerIframe {
+    position: relative;
+    z-index: 1 !important;
+    background: #ffffff;
+}
+
+#documentTextContainer {
+    position: relative;
+    z-index: 1 !important;
+}
+
+/* Hidden state styles */
+.document-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Dark theme support */
+.theme-dark #documentViewerContent {
+    background: #2d2d2d;
+}
+
+.theme-dark #documentViewerContent #documentViewerIframe {
+    background: #2d2d2d;
+}
+
+.theme-dark #documentViewerContent #documentTextContainer {
+    background: #2d2d2d;
+}
+
+.theme-dark #documentViewerContent #documentImageContainer {
+    background: #1a1a1a;
+}
+
+.theme-dark #documentViewerContent #documentViewerLoading,
+.theme-dark #documentViewerContent #documentViewerError {
+    background: rgba(45, 45, 45, 0.95);
+}
+
+/* Dark theme fixes */
+.theme-dark #documentViewerLoading {
+    background: rgba(45, 45, 45, 0.95) !important;
+}
+
+.theme-dark #documentViewerError {
+    background: rgba(45, 45, 45, 0.95) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #documentViewerContent {
+        min-height: calc(100vh - 60px); /* Account for modal header */
+    }
+
+    #documentViewerContent #documentViewerIframe {
+        min-height: calc(100vh - 80px);
+    }
+}
+
+/* Animation for content switching */
+#documentViewerContent > div {
+    transition: opacity 0.2s ease-in-out;
+}
+
+#documentViewerContent > div[style*="display: none"] {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#documentViewerContent > div[style*="display: block"],
+#documentViewerContent > div[style*="display: flex"] {
+    opacity: 1;
+    pointer-events: auto;
+}
+.input-wrapper {
+    flex: 1;
+    width: 100%;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    background: var(--input-bg, #f8f9fa);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 12px;
+    padding: 8px 12px;
+    min-height: 44px;
+    box-sizing: border-box;
+}
+
+/* Print styles for document content */
+@media print {
+    #documentViewerContent {
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+    }
+
+    #documentViewerContent #documentViewerLoading,
+    #documentViewerContent #documentViewerError {
+        display: none !important;
+    }
 }
 

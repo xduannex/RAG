@@ -1,217 +1,17 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RAG PDF Search - Chat Interface</title>
+
+    <!-- External Stylesheets -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Local Stylesheets -->
     <link href="css/style.css" rel="stylesheet">
+    <link href="css/documents.css" rel="stylesheet">
     <link href="css/chat.css" rel="stylesheet">
-    <style>
-        /* Fix for chat input and search suggestions */
-        .chat-input-container {
-            position: relative;
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            padding: 16px;
-            background: var(--bg-color, #fff);
-            border-top: 1px solid var(--border-color, #e0e0e0);
-        }
-
-        .chat-input-form {
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            width: 100%;
-        }
-
-        .input-wrapper {
-            flex: 1;
-            position: relative;
-            display: flex;
-            align-items: flex-end;
-            background: var(--input-bg, #f8f9fa);
-            border: 1px solid var(--border-color, #e0e0e0);
-            border-radius: 12px;
-            padding: 8px 12px;
-            min-height: 44px;
-        }
-
-        .chat-input {
-            flex: 1;
-            border: none;
-            background: transparent;
-            resize: none;
-            outline: none;
-            font-size: 14px;
-            line-height: 1.4;
-            min-height: 20px;
-            max-height: 120px;
-            padding: 4px 0;
-            font-family: inherit;
-        }
-
-        .input-actions {
-            display: flex;
-            gap: 4px;
-            margin-left: 8px;
-        }
-
-        .chat-send-btn {
-            background: var(--primary-color, #007bff);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 44px;
-            height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-
-        .chat-send-btn:hover {
-            background: var(--primary-hover, #0056b3);
-            transform: scale(1.05);
-        }
-
-        .chat-send-btn:disabled {
-            background: var(--disabled-color, #6c757d);
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        /* Upload area improvements */
-        .upload-area {
-            position: relative;
-            transition: all 0.3s ease;
-        }
-
-        .upload-area.dragover {
-            border-color: var(--primary-color, #007bff);
-            background-color: rgba(0, 123, 255, 0.1);
-            transform: scale(1.02);
-        }
-
-        .upload-progress {
-            margin-top: 1rem;
-        }
-
-        .progress {
-            width: 100%;
-            height: 8px;
-            background-color: #e9ecef;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background-color: #007bff;
-            transition: width 0.3s ease;
-            border-radius: 4px;
-        }
-
-        /* Error and success states */
-        .error-state, .empty-state {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-muted, #6c757d);
-        }
-
-        .error-state .error-icon, .empty-state .empty-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        .error-state .error-icon {
-            color: var(--danger-color, #dc3545);
-        }
-
-        .empty-state .empty-icon {
-            color: var(--info-color, #17a2b8);
-        }
-
-        /* Document item improvements */
-        .document-item {
-            transition: all 0.2s ease;
-        }
-
-        .document-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-
-        .document-item.selected {
-            border-color: var(--primary-color, #007bff);
-            background-color: rgba(0, 123, 255, 0.05);
-        }
-
-        .document-actions {
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .document-item:hover .document-actions {
-            opacity: 1;
-        }
-
-        /* Status indicators */
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            text-transform: uppercase;
-        }
-
-        .status-uploaded {
-            background-color: rgba(23, 162, 184, 0.1);
-            color: #17a2b8;
-        }
-
-        .status-processing {
-            background-color: rgba(255, 193, 7, 0.1);
-            color: #ffc107;
-        }
-
-        .status-processed, .status-completed {
-            background-color: rgba(40, 167, 69, 0.1);
-            color: #28a745;
-        }
-
-        .status-failed {
-            background-color: rgba(220, 53, 69, 0.1);
-            color: #dc3545;
-        }
-
-        /* Responsive improvements */
-        @media (max-width: 768px) {
-            .chat-input-container {
-                padding: 12px;
-            }
-
-            .input-wrapper {
-                min-height: 40px;
-            }
-
-            .chat-send-btn {
-                width: 40px;
-                height: 40px;
-            }
-
-            .document-actions {
-                opacity: 1; /* Always show on mobile */
-            }
-        }
-    </style>
 </head>
 <body>
     <!-- Header -->
@@ -238,11 +38,12 @@
     </header>
 
     <!-- Main Content -->
-    <main class="main-content" id="main-content">
+    <main class="main-content">
         <div class="container">
             <div class="row">
                 <!-- Sidebar -->
                 <div class="col-sidebar">
+                    <!-- Upload Section -->
                     <div class="section">
                         <div class="section-header">
                             <h2 class="section-title">
@@ -250,7 +51,6 @@
                             </h2>
                         </div>
 
-                        <!-- Upload Area -->
                         <form id="uploadForm" enctype="multipart/form-data">
                             <div class="upload-area" id="uploadArea">
                                 <div class="upload-icon">
@@ -267,14 +67,12 @@
 
                             <div class="form-group">
                                 <label class="form-label" for="titleInput">Title (optional)</label>
-                                <input type="text" class="form-control" id="titleInput"
-                                       placeholder="Enter document title">
+                                <input type="text" class="form-control" id="titleInput" placeholder="Enter document title">
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="categoryInput">Category (optional)</label>
-                                <input type="text" class="form-control" id="categoryInput"
-                                       placeholder="Enter category">
+                                <input type="text" class="form-control" id="categoryInput" placeholder="Enter category">
                             </div>
 
                             <button type="submit" class="btn btn-primary w-100">
@@ -290,35 +88,13 @@
                         </form>
                     </div>
 
-<!--                    &lt;!&ndash; Document List &ndash;&gt;-->
-<!--                    <div class="section">-->
-<!--                        <div class="section-header">-->
-<!--                            <h2 class="section-title">-->
-<!--                                <i class="fas fa-folder-open"></i> Documents-->
-<!--                            </h2>-->
-<!--                            <div class="section-actions">-->
-<!--                                <button class="btn btn-outline btn-sm" onclick="loadDocuments()" title="Refresh">-->
-<!--                                    <i class="fas fa-sync-alt"></i>-->
-<!--                                </button>-->
-<!--                            </div>-->
-<!--                        </div>-->
-
-<!--                        <div class="pdf-list" id="documentList">-->
-<!--                            <div class="loading">-->
-<!--                                <div class="loading-spinner"></div>-->
-<!--                                <span>Loading documents...</span>-->
-<!--                            </div>-->
-<!--                        </div>-->
-<!--                    </div>-->
-
-                    <!-- Stats -->
+                    <!-- Stats Section -->
                     <div class="section">
                         <div class="section-header">
                             <h2 class="section-title">
                                 <i class="fas fa-chart-bar"></i> Statistics
                             </h2>
                         </div>
-
                         <div class="stats-grid">
                             <div class="stat-card">
                                 <div class="stat-value" id="totalDocs">-</div>
@@ -340,7 +116,7 @@
                                 <i class="fas fa-comments"></i> RAG Assistant
                             </h2>
                             <div class="section-actions">
-                                                                <button class="btn btn-outline btn-sm" onclick="clearChat()">
+                                <button class="btn btn-outline btn-sm" onclick="clearChat()">
                                     <i class="fas fa-trash"></i> Clear
                                 </button>
                                 <button class="btn btn-outline btn-sm" onclick="loadStats()">
@@ -352,7 +128,7 @@
                             </div>
                         </div>
 
-                        <!-- Search Options -->
+                        <!-- Search Mode Selector -->
                         <div class="search-options">
                             <div class="search-mode-selector">
                                 <button type="button" class="search-mode-btn active" data-mode="rag" onclick="setSearchMode('rag')">
@@ -364,7 +140,7 @@
                             </div>
                         </div>
 
-                        <!-- Advanced Search Panel (Hidden by default) -->
+                        <!-- Advanced Search Panel -->
                         <div id="advancedSearchPanel" class="advanced-search-panel" style="display: none;">
                             <h4><i class="fas fa-filter"></i> Advanced Search Options</h4>
                             <div class="form-row">
@@ -373,41 +149,17 @@
                                     <select class="form-control" id="filterDocType">
                                         <option value="">All Types</option>
                                         <option value="pdf">PDF</option>
-                                        <option value="docx">Word Document (DOCX)</option>
-                                        <option value="doc">Word Document (DOC)</option>
-                                        <option value="xlsx">Excel Spreadsheet (XLSX)</option>
-                                        <option value="xls">Excel Spreadsheet (XLS)</option>
-                                        <option value="pptx">PowerPoint (PPTX)</option>
-                                        <option value="ppt">PowerPoint (PPT)</option>
+                                        <option value="docx">Word Document</option>
                                         <option value="txt">Text File</option>
                                         <option value="md">Markdown</option>
-                                        <option value="rtf">Rich Text Format</option>
-                                        <option value="csv">CSV</option>
-                                        <option value="json">JSON</option>
-                                        <option value="xml">XML</option>
-                                        <option value="html">HTML</option>
-                                        <option value="image">Image Files</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Category</label>
                                     <select class="form-control" id="filterCategory">
                                         <option value="">All Categories</option>
-                                        <!-- Categories will be populated dynamically -->
                                     </select>
                                 </div>
-                                <div class="form-group">
-                                    <label class="form-label">Date Range</label>
-                                    <select class="form-control" id="filterDateRange">
-                                        <option value="">Any Time</option>
-                                        <option value="today">Today</option>
-                                        <option value="week">This Week</option>
-                                        <option value="month">This Month</option>
-                                        <option value="year">This Year</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-row">
                                 <div class="form-group">
                                     <label class="form-label">Max Results</label>
                                     <select class="form-control" id="maxResults">
@@ -416,12 +168,6 @@
                                         <option value="20">20 Results</option>
                                         <option value="50">50 Results</option>
                                     </select>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Similarity Threshold</label>
-                                    <input type="range" class="form-control" id="similarityThreshold"
-                                           min="0" max="1" step="0.1" value="0.0">
-                                    <small class="form-text">Current: <span id="thresholdValue">0.0</span></small>
                                 </div>
                             </div>
                             <div class="form-actions">
@@ -453,53 +199,15 @@
                                                 <li>Get AI-powered answers with source citations</li>
                                                 <li>Process images with OCR for text extraction</li>
                                             </ul>
-                                            <div class="supported-formats">
-                                                <h4>Supported File Types:</h4>
-                                                <div class="format-grid">
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-pdf file-type-icon file-type-pdf"></i>
-                                                        <span>PDF</span>
-                                                    </div>
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-word file-type-icon file-type-word"></i>
-                                                        <span>Word (DOC/DOCX)</span>
-                                                    </div>
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-excel file-type-icon file-type-excel"></i>
-                                                        <span>Excel (XLS/XLSX)</span>
-                                                    </div>
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-powerpoint file-type-icon file-type-powerpoint"></i>
-                                                        <span>PowerPoint (PPT/PPTX)</span>
-                                                    </div>
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-alt file-type-icon file-type-text"></i>
-                                                        <span>Text/Markdown</span>
-                                                    </div>
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-csv file-type-icon file-type-csv"></i>
-                                                        <span>CSV</span>
-                                                    </div>
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-image file-type-icon file-type-image"></i>
-                                                        <span>Images (OCR)</span>
-                                                    </div>
-                                                    <div class="format-item">
-                                                        <i class="fas fa-file-code file-type-icon file-type-json"></i>
-                                                        <span>JSON/XML/HTML</span>
-                                                    </div>
-                                                </div>
-                                            </div>
                                             <p class="text-muted">
-                                                <strong>Tip:</strong> Use <kbd>↑</kbd>/<kbd>↓</kbd> to navigate search suggestions,
-                                                <kbd>Enter</kbd> to select, <kbd>Esc</kbd> to close.
+                                                <strong>Tip:</strong> Use <kbd>Ctrl+K</kbd> to focus search, <kbd>Ctrl+L</kbd> to clear chat.
                                             </p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Fixed Chat Input Container -->
+                            <!-- Chat Input -->
                             <div class="chat-input-container">
                                 <form id="chatForm" class="chat-input-form">
                                     <div class="input-wrapper">
@@ -512,11 +220,10 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <button class="chat-send-btn" type="submit" id="sendButton" title="Send message (Enter)">
+                                    <button class="chat-send-btn" type="submit" id="sendButton" title="Send message">
                                         <i class="fas fa-paper-plane"></i>
                                     </button>
                                 </form>
-                                <!-- Search suggestions will be inserted here by JavaScript -->
                             </div>
                         </div>
                     </div>
@@ -525,10 +232,60 @@
         </div>
     </main>
 
-    <!-- Status Container -->
-    <div class="status-container" id="statusContainer"></div>
+    <!-- Document Viewer Modal -->
+    <!-- Document Viewer Modal -->
+<div id="documentViewerModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3 id="documentViewerTitle">Document Viewer</h3>
+            <div class="modal-actions">
+                <button class="btn btn-sm btn-outline" id="downloadDocumentBtn" title="Download">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button class="btn btn-sm btn-outline" id="viewChunksBtn" title="View Chunks">
+                    <i class="fas fa-list"></i>
+                </button>
+                <span class="close" id="closeDocumentViewer">&times;</span>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div id="documentViewerContent">
+                <!-- Add the missing iframe that your documents.js is looking for -->
+                <iframe id="documentViewerIframe"
+                        src=""
+                        width="100%"
+                        height="600px"
+                        frameborder="0"
+                        style="border: 1px solid #ddd; border-radius: 4px;">
+                </iframe>
 
-    <!-- All Modals (Help, Search History, Document Viewer, etc.) -->
+                <!-- Alternative content areas for different document types -->
+                <div id="documentImageContainer" style="display: none; text-align: center;">
+                    <img id="documentImage" src="" alt="Document" style="max-width: 100%; height: auto;">
+                </div>
+
+                <div id="documentTextContainer" style="display: none; padding: 20px; background: #f9f9f9; border-radius: 4px;">
+                    <pre id="documentText" style="white-space: pre-wrap; font-family: inherit;"></pre>
+                </div>
+
+                <div id="documentLoadingContainer" class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading document...</div>
+                </div>
+
+                <div id="documentErrorContainer" class="error-container" style="display: none;">
+                    <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+                    <div class="error-text">Failed to load document</div>
+                    <button class="btn btn-sm btn-primary" onclick="retryLoadDocument()">
+                        <i class="fas fa-retry"></i> Retry
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
     <!-- Help Modal -->
     <div id="helpModal" class="modal">
         <div class="modal-content">
@@ -545,7 +302,6 @@
                         <li>Drag and drop files onto the upload area</li>
                         <li>Or click the upload area to browse for files</li>
                         <li>Multiple file selection is supported</li>
-                        <li>Supported formats: PDF, Word, Excel, PowerPoint, Text, Images, and more</li>
                         <li>Add optional title and category for better organization</li>
                     </ul>
                 </div>
@@ -563,9 +319,12 @@
         </div>
     </div>
 
-    <!-- Global Configuration Script (Must load first) -->
+    <!-- Status Container -->
+    <div class="status-container" id="statusContainer"></div>
+
+    <!-- Global Configuration Script -->
     <script>
-        // Global configuration and variables
+        // Global configuration
         window.API_BASE_URL = 'http://localhost:8000';
         window.APP_CONFIG = {
             upload: {
@@ -581,37 +340,11 @@
                 defaultLimit: 10,
                 maxLimit: 50,
                 suggestionsLimit: 5
-            },
-            fileTypeIcons: {
-                'pdf': 'fas fa-file-pdf file-type-pdf',
-                'doc': 'fas fa-file-word file-type-word',
-                'docx': 'fas fa-file-word file-type-word',
-                'xlsx': 'fas fa-file-excel file-type-excel',
-                'xls': 'fas fa-file-excel file-type-excel',
-                'pptx': 'fas fa-file-powerpoint file-type-powerpoint',
-                'ppt': 'fas fa-file-powerpoint file-type-powerpoint',
-                'txt': 'fas fa-file-alt file-type-text',
-                'md': 'fas fa-file-alt file-type-text',
-                'rtf': 'fas fa-file-alt file-type-text',
-                'csv': 'fas fa-file-csv file-type-csv',
-                'json': 'fas fa-file-code file-type-json',
-                'xml': 'fas fa-file-code file-type-xml',
-                'html': 'fas fa-file-code file-type-html',
-                'htm': 'fas fa-file-code file-type-html',
-                'jpg': 'fas fa-file-image file-type-image',
-                'jpeg': 'fas fa-file-image file-type-image',
-                'png': 'fas fa-file-image file-type-image',
-                'bmp': 'fas fa-file-image file-type-image',
-                'tiff': 'fas fa-file-image file-type-image',
-                'tif': 'fas fa-file-image file-type-image',
-                'gif': 'fas fa-file-image file-type-image',
-                'webp': 'fas fa-file-image file-type-image'
             }
         };
 
         // Global state
         window.isConnected = false;
-        window.currentFileId = null;
         window.currentSearchMode = 'rag';
         window.isDarkMode = false;
 
@@ -626,7 +359,7 @@
         window.formatFileSize = (bytes) => {
             if (!bytes || isNaN(bytes)) return '0 B';
             const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         };
@@ -635,294 +368,129 @@
             if (!timestamp) return 'Unknown';
             try {
                 const date = new Date(timestamp);
-                if (isNaN(date.getTime())) return 'Unknown';
-                return date.toLocaleDateString();
+                return date.toLocaleString();
             } catch (error) {
-                                return 'Unknown';
+                return 'Invalid Date';
             }
         };
 
-        window.getFileTypeIcon = (filename) => {
-            if (!filename) return 'fas fa-file file-type-text';
-            const extension = filename.split('.').pop()?.toLowerCase();
-            return window.APP_CONFIG.fileTypeIcons[extension] || 'fas fa-file file-type-text';
-        };
+        // Search mode management
+        window.setSearchMode = (mode) => {
+            window.currentSearchMode = mode;
+            localStorage.setItem('rag_search_mode', mode);
 
-        window.getFileTypeName = (filename) => {
-            if (!filename) return 'Unknown';
-            const extension = filename.split('.').pop()?.toLowerCase();
-            const typeNames = {
-                'pdf': 'PDF Document',
-                'doc': 'Word Document',
-                'docx': 'Word Document',
-                'xlsx': 'Excel Spreadsheet',
-                'xls': 'Excel Spreadsheet',
-                'pptx': 'PowerPoint Presentation',
-                'ppt': 'PowerPoint Presentation',
-                'txt': 'Text File',
-                'md': 'Markdown File',
-                'rtf': 'Rich Text Format',
-                'csv': 'CSV File',
-                'json': 'JSON File',
-                'xml': 'XML File',
-                'html': 'HTML File',
-                'htm': 'HTML File',
-                'jpg': 'JPEG Image',
-                'jpeg': 'JPEG Image',
-                'png': 'PNG Image',
-                'bmp': 'BMP Image',
-                'tiff': 'TIFF Image',
-                'tif': 'TIFF Image',
-                'gif': 'GIF Image',
-                'webp': 'WebP Image'
-            };
-            return typeNames[extension] || 'Unknown File Type';
-        };
-
-        // Connection status check
-        window.checkConnection = async () => {
-            try {
-                const response = await fetch(`${window.API_BASE_URL}/health`, {
-                    method: 'GET',
-                    timeout: 5000
-                });
-
-                const isConnected = response.ok;
-                window.isConnected = isConnected;
-
-                const indicator = document.getElementById('connectionIndicator');
-                const statusText = document.getElementById('statusText');
-                const statusDot = document.getElementById('statusDot');
-
-                if (indicator && statusText) {
-                    if (isConnected) {
-                        indicator.className = 'connection-indicator connected';
-                        statusText.textContent = 'Connected';
-                    } else {
-                        indicator.className = 'connection-indicator disconnected';
-                        statusText.textContent = 'Disconnected';
-                    }
+            // Update UI
+            document.querySelectorAll('.search-mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.mode === mode) {
+                    btn.classList.add('active');
                 }
+            });
 
-                return isConnected;
-            } catch (error) {
-                console.warn('Connection check failed:', error);
-                window.isConnected = false;
-
-                const indicator = document.getElementById('connectionIndicator');
-                const statusText = document.getElementById('statusText');
-
-                if (indicator && statusText) {
-                    indicator.className = 'connection-indicator disconnected';
-                    statusText.textContent = 'Connection Failed';
+            // Update placeholder
+            const messageInput = document.getElementById('messageInput');
+            if (messageInput) {
+                if (mode === 'rag') {
+                    messageInput.placeholder = 'Ask a question about your documents...';
+                } else {
+                    messageInput.placeholder = 'Search for specific content...';
                 }
-
-                return false;
             }
+
+            console.log(`Search mode set to: ${mode}`);
         };
 
-        // Initialize connection check
-        document.addEventListener('DOMContentLoaded', () => {
-            // Check connection immediately
-            window.checkConnection();
-
-            // Check connection every 30 seconds
-            setInterval(window.checkConnection, 30000);
-        });
-
-        console.log('Global configuration loaded');
-    </script>
-
-    <!-- Core JavaScript Files (Load in order) -->
-    <script src="js/utils.js"></script>
-    <script src="js/notifications.js"></script>
-    <script src="js/keyboard.js"></script>
-    <script src="js/modal.js"></script>
-    <script src="js/stats.js"></script>
-    <script src="js/upload.js"></script>
-    <script src="js/documents.js"></script>
-    <script src="js/search.js"></script>
-    <script src="js/chat.js"></script>
-    <script src="js/app.js"></script>
-
-    <!-- Additional functionality scripts -->
-    <script>
-        // Advanced search functionality
-        function toggleAdvancedSearch() {
+        // Advanced search management
+        window.toggleAdvancedSearch = () => {
             const panel = document.getElementById('advancedSearchPanel');
             if (panel) {
                 const isVisible = panel.style.display !== 'none';
                 panel.style.display = isVisible ? 'none' : 'block';
 
-                // Update button state
-                const button = document.querySelector('[onclick="toggleAdvancedSearch()"]');
-                if (button) {
-                    button.classList.toggle('active', !isVisible);
+                // Update button text
+                const btn = document.querySelector('[onclick="toggleAdvancedSearch()"]');
+                if (btn) {
+                    const icon = btn.querySelector('i');
+                    if (icon) {
+                        icon.className = isVisible ? 'fas fa-cog' : 'fas fa-times';
+                    }
                 }
             }
-        }
+        };
 
-        function resetAdvancedSearch() {
+        window.resetAdvancedSearch = () => {
             document.getElementById('filterDocType').value = '';
             document.getElementById('filterCategory').value = '';
-            document.getElementById('filterDateRange').value = '';
             document.getElementById('maxResults').value = '10';
-            document.getElementById('similarityThreshold').value = '0.0';
-            document.getElementById('thresholdValue').textContent = '0.0';
-        }
+        };
 
-        function applyAdvancedSearch() {
+        window.applyAdvancedSearch = () => {
             const filters = {
                 docType: document.getElementById('filterDocType').value,
                 category: document.getElementById('filterCategory').value,
-                dateRange: document.getElementById('filterDateRange').value,
-                maxResults: parseInt(document.getElementById('maxResults').value),
-                similarityThreshold: parseFloat(document.getElementById('similarityThreshold').value)
+                maxResults: parseInt(document.getElementById('maxResults').value)
             };
 
-            // Apply filters to current search
-            if (window.searchManager) {
-                window.searchManager.setAdvancedFilters(filters);
-                if (window.showStatus) {
-                    window.showStatus('Advanced search filters applied', 'success');
-                }
+            // Apply filters to search
+            if (window.searchManager && window.searchManager.setFilters) {
+                window.searchManager.setFilters(filters);
             }
-        }
 
-        // Search history functionality
-        function showSearchHistory() {
-            console.log('Show search history clicked');
-            if (window.showStatus) {
-                window.showStatus('Search history feature coming soon', 'info');
+            // Hide advanced panel
+            window.toggleAdvancedSearch();
+
+            console.log('Advanced search filters applied:', filters);
+        };
+
+        // Search history management
+        window.showSearchHistory = () => {
+            if (window.searchManager && window.searchManager.showSearchHistory) {
+                window.searchManager.showSearchHistory();
             }
-        }
+        };
 
-        // Global search mode function
-        function setSearchMode(mode) {
-            if (window.chatManager) {
-                window.chatManager.setSearchMode(mode);
-            } else {
-                // Fallback if chat manager not ready
-                window.currentSearchMode = mode;
+        // Status display
+        window.showStatus = (message, type = 'info', duration = 3000) => {
+            const container = document.getElementById('statusContainer');
+            if (!container) return;
 
-                // Update UI
-                document.querySelectorAll('.search-mode-btn').forEach(btn => {
-                    btn.classList.remove('active');
-                });
+            const statusElement = document.createElement('div');
+            statusElement.className = `status-message status-${type}`;
+            statusElement.innerHTML = `
+                <span class="status-icon">${getStatusIcon(type)}</span>
+                <span class="status-text">${window.escapeHtml(message)}</span>
+                <button class="status-close" onclick="this.parentElement.remove()">×</button>
+            `;
 
-                const activeBtn = document.querySelector(`[data-mode="${mode}"]`);
-                if (activeBtn) {
-                    activeBtn.classList.add('active');
-                }
+            container.appendChild(statusElement);
 
-                // Update placeholder
-                const input = document.getElementById('messageInput');
-                if (input) {
-                    if (mode === 'rag') {
-                        input.placeholder = 'Ask a question about your documents...';
-                    } else {
-                        input.placeholder = 'Search for content in your documents...';
+            if (duration > 0) {
+                setTimeout(() => {
+                    if (statusElement.parentElement) {
+                        statusElement.remove();
                     }
-                }
-
-                localStorage.setItem('rag_search_mode', mode);
+                }, duration);
             }
+        };
+
+        function getStatusIcon(type) {
+            const icons = {
+                success: '✅',
+                error: '❌',
+                warning: '⚠️',
+                info: 'ℹ️'
+            };
+            return icons[type] || icons.info;
         }
 
-        // Similarity threshold slider
+        // Initialize on DOM ready
         document.addEventListener('DOMContentLoaded', () => {
-            const slider = document.getElementById('similarityThreshold');
-            const valueDisplay = document.getElementById('thresholdValue');
+            // Load saved search mode
+            const savedMode = localStorage.getItem('rag_search_mode') || 'rag';
+            window.setSearchMode(savedMode);
 
-            if (slider && valueDisplay) {
-                slider.addEventListener('input', (e) => {
-                    valueDisplay.textContent = e.target.value;
-                });
-            }
-        });
-
-        // Enhanced keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            // Don't trigger shortcuts when typing in inputs (except for specific cases)
-            const isInputFocused = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
-
-            if (e.ctrlKey || e.metaKey) {
-                switch (e.key) {
-                    case 'k':
-                        e.preventDefault();
-                        const messageInput = document.getElementById('messageInput');
-                        if (messageInput) {
-                            messageInput.focus();
-                        }
-                        break;
-                    case 'l':
-                        if (!isInputFocused) {
-                            e.preventDefault();
-                            clearChat();
-                        }
-                        break;
-                    case 'r':
-                        if (!isInputFocused) {
-                            e.preventDefault();
-                            loadStats();
-                        }
-                        break;
-                    case 'd':
-                        if (!isInputFocused) {
-                            e.preventDefault();
-                            toggleTheme();
-                        }
-                        break;
-                    case 'u':
-                        if (!isInputFocused) {
-                            e.preventDefault();
-                            const fileInput = document.getElementById('fileInput');
-                            if (fileInput) {
-                                fileInput.click();
-                            }
-                        }
-                        break;
-                }
-            }
-
-            // Help shortcut
-            if ((e.key === 'F1' || e.key === '?') && !isInputFocused) {
-                e.preventDefault();
-                showHelp();
-            }
-
-            // Escape key to close modals
-            if (e.key === 'Escape') {
-                const modals = document.querySelectorAll('.modal');
-                modals.forEach(modal => {
-                    if (modal.style.display === 'flex') {
-                        modal.style.display = 'none';
-                    }
-                });
-            }
-        });
-
-        // Error handling for failed script loads
-        window.addEventListener('error', (e) => {
-            if (e.target.tagName === 'SCRIPT') {
-                console.error('Failed to load script:', e.target.src);
-                const statusContainer = document.getElementById('statusContainer');
-                if (statusContainer) {
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'status-message status-error';
-                    errorDiv.innerHTML = `
-                        <i class="fas fa-exclamation-triangle status-icon"></i>
-                        <span class="status-text">Failed to load application scripts. Please refresh the page.</span>
-                        <button class="status-close" onclick="this.parentElement.remove()">×</button>
-                    `;
-                    statusContainer.appendChild(errorDiv);
-                }
-            }
-        });
-
-        // Initialize theme from localStorage
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = localStorage.getItem('rag_theme');
+            // Load saved theme
+            const savedTheme = localStorage.getItem('rag_theme') || 'light';
             if (savedTheme === 'dark') {
                 document.body.classList.add('theme-dark');
                 window.isDarkMode = true;
@@ -931,11 +499,37 @@
                     themeIcon.className = 'fas fa-sun';
                 }
             }
-        });
 
-        console.log('Main HTML script loaded');
+            console.log('RAG Application HTML initialized');
+        });
+    </script>
+
+    <!-- JavaScript Files -->
+    <script src="js/utils.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/keyboard.js"></script>
+    <script src="js/modal.js"></script>
+    <script src="js/notifications.js"></script>
+    <script src="js/upload.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/documents.js"></script>
+    <script src="js/stats.js"></script>
+    <script src="js/app.js"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered successfully:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
     </script>
 </body>
 </html>
-
-

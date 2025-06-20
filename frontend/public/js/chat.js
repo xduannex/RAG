@@ -1,5 +1,5 @@
-// RAG Chat Application - Chat Management
-// Handles chat interface, message sending, and RAG responses
+// RAG Chat Application - Enhanced Chat Management with Typing Animation
+// Handles chat interface, message sending, and RAG responses with elegant animations
 
 class ChatManager {
     constructor(apiBaseUrl) {
@@ -8,9 +8,11 @@ class ChatManager {
         this.messageInput = null;
         this.sendButton = null;
         this.chatForm = null;
-        this.currentSearchMode = 'rag'; // 'rag' or 'search'
+        this.currentSearchMode = 'rag';
         this.isProcessing = false;
         this.messageHistory = [];
+        this.typingIndicator = null;
+        this.typingTimeout = null;
         this.init();
     }
 
@@ -18,6 +20,7 @@ class ChatManager {
         console.log('Initializing Chat Manager...');
         this.setupElements();
         this.setupEventListeners();
+        this.createTypingIndicator();
 
         // Register globally
         window.chatManager = this;
@@ -40,35 +43,69 @@ class ChatManager {
         }
     }
 
-    setupEventListeners() {
-        if (this.chatForm) {
-            this.chatForm.addEventListener('submit', (e) => this.handleSubmit(e));
+    createTypingIndicator() {
+        // Create elegant typing indicator
+        this.typingIndicator = document.createElement('div');
+        this.typingIndicator.className = 'typing-indicator';
+        this.typingIndicator.innerHTML = `
+            <div class="typing-bubble">
+                <div class="typing-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="typing-content">
+                    <div class="typing-text">
+                        <span class="typing-label">AI is thinking</span>
+                        <div class="typing-dots">
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        this.typingIndicator.style.display = 'none';
+    }
+
+    showTypingIndicator(customText = 'AI is thinking') {
+        if (!this.chatContainer || !this.typingIndicator) return;
+
+        // Update typing text
+        const typingLabel = this.typingIndicator.querySelector('.typing-label');
+        if (typingLabel) {
+            typingLabel.textContent = customText;
         }
 
-        if (this.messageInput) {
-            // Auto-resize textarea
-            this.messageInput.addEventListener('input', () => {
-                this.autoResizeTextarea();
-            });
-
-            // Handle Enter key
-            this.messageInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    this.handleSubmit(e);
-                }
-            });
+        // Add to chat container if not already there
+        if (!this.typingIndicator.parentNode) {
+            this.chatContainer.appendChild(this.typingIndicator);
         }
 
-        // Search mode buttons
-        document.querySelectorAll('.search-mode-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const mode = e.target.dataset.mode;
-                if (mode) {
-                    this.setSearchMode(mode);
-                }
-            });
-        });
+        // Show with animation
+        this.typingIndicator.style.display = 'block';
+        setTimeout(() => {
+            this.typingIndicator.classList.add('visible');
+        }, 10);
+
+        // Auto-scroll to bottom
+        this.scrollToBottom();
+
+        console.log('💬 Typing indicator shown:', customText);
+    }
+
+    hideTypingIndicator() {
+        if (!this.typingIndicator) return;
+
+        this.typingIndicator.classList.remove('visible');
+
+        setTimeout(() => {
+            this.typingIndicator.style.display = 'none';
+            if (this.typingIndicator.parentNode) {
+                this.typingIndicator.parentNode.removeChild(this.typingIndicator);
+            }
+        }, 300);
+
+        console.log('💬 Typing indicator hidden');
     }
 
     async handleSubmit(e) {
@@ -88,12 +125,18 @@ class ChatManager {
         this.updateSendButton(true);
 
         try {
-            // Add user message to chat
+            // Add user message to chat with elegant animation
             this.addMessage('user', query);
 
-            // Clear input
-            this.messageInput.value = '';
-            this.autoResizeTextarea();
+            // Clear input with smooth animation
+            this.clearInputWithAnimation();
+
+            // Show typing indicator
+            if (this.currentSearchMode === 'rag') {
+                this.showTypingIndicator('AI is analyzing your question');
+            } else {
+                this.showTypingIndicator('Searching documents');
+            }
 
             // Send to appropriate endpoint based on mode
             let response;
@@ -103,12 +146,22 @@ class ChatManager {
                 response = await this.sendSearchQuery(query);
             }
 
-            // Add response to chat
+            // Hide typing indicator before showing response
+            this.hideTypingIndicator();
+
+            // Small delay for better UX
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Add response to chat with typing animation
             this.handleResponse(response);
 
         } catch (error) {
             console.error('Chat error:', error);
-            this.addMessage('error', 'Sorry, I encountered an error processing your request: ' + error.message);
+            this.hideTypingIndicator();
+
+            setTimeout(() => {
+                this.addMessage('error', 'Sorry, I encountered an error processing your request: ' + error.message);
+            }, 300);
 
             if (window.showStatus) {
                 window.showStatus('Failed to process message: ' + error.message, 'error');
@@ -117,6 +170,21 @@ class ChatManager {
             this.isProcessing = false;
             this.updateSendButton(false);
         }
+    }
+
+    clearInputWithAnimation() {
+        const input = this.messageInput;
+        if (!input) return;
+
+        // Smooth clear animation
+        input.style.transition = 'opacity 0.2s ease';
+        input.style.opacity = '0.5';
+
+        setTimeout(() => {
+            input.value = '';
+            this.autoResizeTextarea();
+            input.style.opacity = '1';
+        }, 100);
     }
 
     async sendRAGQuery(query) {
@@ -192,8 +260,8 @@ class ChatManager {
         const answer = response.answer || 'No answer generated';
         const sources = response.sources || [];
 
-        // Add the AI response
-        this.addMessage('assistant', answer, {
+        // Add the AI response with typing animation
+        this.addMessageWithTypingAnimation('assistant', answer, {
             sources: sources,
             query: response.query,
             model: response.model_used,
@@ -216,7 +284,6 @@ class ChatManager {
             return;
         }
 
-        // Format search results
         const searchSummary = `Found ${total} result${total !== 1 ? 's' : ''} for your search:`;
 
         this.addMessage('search-results', searchSummary, {
@@ -225,6 +292,107 @@ class ChatManager {
             total: total,
             parameters: response.parameters
         });
+    }
+
+    addMessageWithTypingAnimation(type, content, metadata = {}) {
+        if (type !== 'assistant') {
+            // For non-assistant messages, use regular add
+            this.addMessage(type, content, metadata);
+            return;
+        }
+
+        // Create message placeholder
+        const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const timestamp = new Date();
+
+        const messageData = {
+            id: messageId,
+            type: type,
+            content: '',
+            metadata: metadata,
+            timestamp: timestamp
+        };
+
+        this.messageHistory.push(messageData);
+
+        // Create message element with empty content
+        const messageElement = this.createMessageElement(messageData);
+        this.chatContainer.appendChild(messageElement);
+        this.scrollToBottom();
+
+        // Start typing animation
+        this.simulateTyping(messageElement, content, metadata);
+    }
+
+  simulateTyping(messageElement, fullContent, metadata) {
+    const contentElement = messageElement.querySelector('.message-text');
+    if (!contentElement) return;
+
+    // Clear content and reset styles
+    contentElement.innerHTML = '';
+    contentElement.style.whiteSpace = 'normal';
+    contentElement.style.wordBreak = 'normal';
+
+    let currentIndex = 0;
+    const typingSpeed = 5;
+
+    // Clean the text
+    const cleanText = fullContent
+        .replace(/<[^>]*>/g, '')
+        .replace(/\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const typeCharacter = () => {
+        if (currentIndex < cleanText.length) {
+            contentElement.textContent = cleanText.substring(0, currentIndex + 1);
+            currentIndex++;
+            setTimeout(typeCharacter, typingSpeed);
+        } else {
+            // FIXED: Just use the original content without calling formatMessageContent
+            contentElement.innerHTML = fullContent;
+            this.addSourcesAfterTyping(messageElement, metadata);
+            this.saveMessageHistory();
+        }
+    };
+
+    typeCharacter();
+}
+
+    addSourcesAfterTyping(messageElement, metadata) {
+        const sources = metadata.sources || [];
+        if (sources.length === 0) return;
+
+        const sourcesHTML = this.createSourcesHTML(sources);
+        const sourcesElement = document.createElement('div');
+        sourcesElement.innerHTML = sourcesHTML;
+
+        // Add sources with fade-in animation
+        sourcesElement.style.opacity = '0';
+        sourcesElement.style.transform = 'translateY(10px)';
+        sourcesElement.style.transition = 'all 0.3s ease';
+
+        messageElement.querySelector('.message-content').appendChild(sourcesElement);
+
+        setTimeout(() => {
+            sourcesElement.style.opacity = '1';
+            sourcesElement.style.transform = 'translateY(0)';
+        }, 100);
+
+        // Add metadata
+        if (metadata.responseTime) {
+            const metaElement = document.createElement('div');
+            metaElement.className = 'message-meta';
+            metaElement.innerHTML = `Response time: ${(metadata.responseTime * 1000).toFixed(0)}ms`;
+            metaElement.style.opacity = '0';
+            metaElement.style.transition = 'opacity 0.3s ease';
+
+            messageElement.querySelector('.message-content').appendChild(metaElement);
+
+            setTimeout(() => {
+                metaElement.style.opacity = '1';
+            }, 200);
+        }
     }
 
     addMessage(type, content, metadata = {}) {
@@ -241,19 +409,25 @@ class ChatManager {
             timestamp: timestamp
         };
 
-        // Add to history
         this.messageHistory.push(messageData);
 
         // Create message element
         const messageElement = this.createMessageElement(messageData);
 
-        // Add to container
+        // Add with slide-in animation
+        messageElement.style.opacity = '0';
+        messageElement.style.transform = 'translateY(20px)';
+        messageElement.style.transition = 'all 0.3s ease';
+
         this.chatContainer.appendChild(messageElement);
 
-        // Scroll to bottom
-        this.scrollToBottom();
+        // Trigger animation
+        setTimeout(() => {
+            messageElement.style.opacity = '1';
+            messageElement.style.transform = 'translateY(0)';
+        }, 10);
 
-        // Save to localStorage
+        this.scrollToBottom();
         this.saveMessageHistory();
     }
 
@@ -289,12 +463,14 @@ class ChatManager {
 
     createUserMessage(content, timestamp) {
         return `
-            <div class="message-content user-message">
-                <div class="message-header">
-                    <span class="message-sender">You</span>
-                    <span class="message-time">${this.formatTime(timestamp)}</span>
+            <div class="message-content">
+                <div class="message-avatar user-avatar">
+                    <i class="fas fa-user"></i>
                 </div>
-                <div class="message-text">${this.escapeHtml(content)}</div>
+                <div class="message-bubble user-bubble">
+                    <div class="message-text">${this.escapeHtml(content)}</div>
+                    <div class="message-time">${this.formatTime(timestamp)}</div>
+                </div>
             </div>
         `;
     }
@@ -304,17 +480,15 @@ class ChatManager {
         const sourcesHTML = sources.length > 0 ? this.createSourcesHTML(sources) : '';
 
         return `
-            <div class="message-content assistant-message">
-                <div class="message-header">
-                    <span class="message-sender">
-                        <i class="fas fa-robot"></i> RAG Assistant
-                    </span>
-                    <span class="message-time">${this.formatTime(timestamp)}</span>
-                    ${metadata.model ? `<span class="message-model">${metadata.model}</span>` : ''}
+            <div class="message-content">
+                <div class="message-avatar assistant-avatar">
+                    <i class="fas fa-robot"></i>
                 </div>
-                <div class="message-text">${this.formatMessageContent(content)}</div>
-                ${sourcesHTML}
-                ${metadata.responseTime ? `<div class="message-meta">Response time: ${(metadata.responseTime * 1000).toFixed(0)}ms</div>` : ''}
+                <div class="message-bubble assistant-bubble">
+                    <div class="message-text">${this.formatContent(content)}</div>
+                    ${sourcesHTML}
+                    <div class="message-time">${this.formatTime(timestamp)}</div>
+                </div>
             </div>
         `;
     }
@@ -324,29 +498,45 @@ class ChatManager {
         const resultsHTML = this.createSearchResultsHTML(results);
 
         return `
-            <div class="message-content search-message">
-                <div class="message-header">
-                    <span class="message-sender">
-                        <i class="fas fa-search"></i> Search Results
-                    </span>
-                    <span class="message-time">${this.formatTime(timestamp)}</span>
+            <div class="message-content">
+                <div class="message-avatar search-avatar">
+                    <i class="fas fa-search"></i>
                 </div>
-                <div class="message-text">${this.escapeHtml(content)}</div>
-                ${resultsHTML}
+                <div class="message-bubble search-bubble">
+                    <div class="message-text">${this.escapeHtml(content)}</div>
+                    ${resultsHTML}
+                    <div class="message-time">${this.formatTime(timestamp)}</div>
+                </div>
             </div>
         `;
     }
 
     createErrorMessage(content, timestamp) {
         return `
-            <div class="message-content error-message">
-                <div class="message-header">
-                    <span class="message-sender">
-                        <i class="fas fa-exclamation-triangle"></i> Error
-                    </span>
-                    <span class="message-time">${this.formatTime(timestamp)}</span>
+            <div class="message-content">
+                <div class="message-avatar error-avatar">
+                    <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <div class="message-text">${this.escapeHtml(content)}</div>
+                <div class="message-bubble error-bubble">
+                    <div class="message-text">
+                        <strong>Error:</strong> ${this.escapeHtml(content)}
+                    </div>
+                    <div class="message-time">${this.formatTime(timestamp)}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    createGenericMessage(content, timestamp) {
+        return `
+            <div class="message-content">
+                <div class="message-avatar system-avatar">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <div class="message-bubble system-bubble">
+                    <div class="message-text">${this.escapeHtml(content)}</div>
+                    <div class="message-time">${this.formatTime(timestamp)}</div>
+                </div>
             </div>
         `;
     }
@@ -354,20 +544,30 @@ class ChatManager {
     createSourcesHTML(sources) {
         if (!sources || sources.length === 0) return '';
 
-        const sourcesItems = sources.map((source, index) => {
-            const filename = source.filename || 'Unknown Document';
-            const similarity = source.similarity_score || 0;
-            const documentId = source.document_id || source.pdf_id;
+        const sourcesHTML = sources.map((source, index) => {
+            const relevancePercentage = Math.round(source.score * 100);
+            const previewText = this.truncateText(source.content, 150);
 
             return `
-                <div class="source-item" onclick="window.documentManager?.openDocumentViewer('${documentId}')">
+                <div class="source-item" data-document-id="${source.document_id}">
                     <div class="source-header">
-                        <span class="source-filename">
-                            <i class="fas fa-file"></i> ${this.escapeHtml(filename)}
-                        </span>
-                        <span class="source-similarity">${(similarity * 100).toFixed(1)}%</span>
+                        <div class="source-title">
+                            <i class="fas fa-file-alt"></i>
+                            <span>${this.escapeHtml(source.title || source.filename || 'Unknown Document')}</span>
+                        </div>
+                        <div class="source-relevance">
+                            <span class="relevance-score">${relevancePercentage}%</span>
+                        </div>
                     </div>
-                    ${source.page_number ? `<div class="source-page">Page ${source.page_number}</div>` : ''}
+                    <div class="source-preview">
+                        "${this.escapeHtml(previewText)}"
+                    </div>
+                    <div class="source-actions">
+                        <button class="btn btn-sm btn-outline" onclick="window.documentManager?.openDocumentViewer(${source.document_id})" title="View Document">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                        ${source.page_number ? `<span class="source-page">Page ${source.page_number}</span>` : ''}
+                    </div>
                 </div>
             `;
         }).join('');
@@ -375,10 +575,11 @@ class ChatManager {
         return `
             <div class="message-sources">
                 <div class="sources-header">
-                    <i class="fas fa-link"></i> Sources (${sources.length})
+                    <i class="fas fa-link"></i>
+                    <span>Sources (${sources.length})</span>
                 </div>
                 <div class="sources-list">
-                    ${sourcesItems}
+                    ${sourcesHTML}
                 </div>
             </div>
         `;
@@ -387,39 +588,202 @@ class ChatManager {
     createSearchResultsHTML(results) {
         if (!results || results.length === 0) return '';
 
-        const resultsItems = results.map((result, index) => {
-            const filename = result.filename || 'Unknown Document';
-            const content = result.content || '';
-            const similarity = result.similarity_score || 0;
-            const documentId = result.document_id || result.pdf_id;
-
-            // Truncate content for display
-            const truncatedContent = content.length > 200 ?
-                content.substring(0, 200) + '...' : content;
+        const resultsHTML = results.map((result, index) => {
+            const relevancePercentage = Math.round(result.score * 100);
+            const previewText = this.truncateText(result.content, 200);
 
             return `
-                <div class="search-result-item" onclick="window.documentManager?.openDocumentViewer('${documentId}')">
+                <div class="search-result-item" data-document-id="${result.document_id}">
                     <div class="result-header">
-                        <span class="result-filename">
-                            <i class="fas fa-file"></i> ${this.escapeHtml(filename)}
-                        </span>
-                        <span class="result-similarity">${(similarity * 100).toFixed(1)}%</span>
+                        <div class="result-number">${index + 1}</div>
+                        <div class="result-title">
+                            <span>${this.escapeHtml(result.title || result.filename || 'Unknown Document')}</span>
+                        </div>
+                        <div class="result-relevance">
+                            <span class="relevance-score">${relevancePercentage}%</span>
+                        </div>
                     </div>
-                    <div class="result-content">${this.escapeHtml(truncatedContent)}</div>
-                    ${result.page_number ? `<div class="result-page">Page ${result.page_number}</div>` : ''}
+                    <div class="result-preview">
+                        ${this.highlightSearchTerms(this.escapeHtml(previewText), result.query)}
+                    </div>
+                    <div class="result-actions">
+                        <button class="btn btn-sm btn-primary" onclick="window.documentManager?.openDocumentViewer(${result.document_id})" title="View Document">
+                            <i class="fas fa-eye"></i> View Document
+                        </button>
+                        ${result.page_number ? `<span class="result-page">Page ${result.page_number}</span>` : ''}
+                    </div>
                 </div>
             `;
         }).join('');
 
         return `
-            <div class="search-results-container">
-                ${resultsItems}
+            <div class="search-results">
+                ${resultsHTML}
             </div>
         `;
     }
 
+    highlightSearchTerms(text, query) {
+        if (!query) return text;
+
+        const terms = query.split(' ').filter(term => term.length > 2);
+        let highlightedText = text;
+
+        terms.forEach(term => {
+            const regex = new RegExp(`(${this.escapeRegExp(term)})`, 'gi');
+            highlightedText = highlightedText.replace(regex, '<mark>$1</mark>');
+        });
+
+        return highlightedText;
+    }
+
+    escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    formatContent(content) {
+        if (!content) return '';
+
+        // Convert markdown-style formatting to HTML
+        let formatted = this.escapeHtml(content);
+
+        // Bold text
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        // Italic text
+        formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+        // Line breaks
+        formatted = formatted.replace(/\n/g, '<br>');
+
+        return formatted;
+    }
+
+    formatTime(timestamp) {
+        if (!timestamp) return '';
+
+        const now = new Date();
+        const messageTime = new Date(timestamp);
+        const diff = now - messageTime;
+
+        if (diff < 60000) { // Less than 1 minute
+            return 'Just now';
+        } else if (diff < 3600000) { // Less than 1 hour
+            const minutes = Math.floor(diff / 60000);
+            return `${minutes}m ago`;
+        } else if (diff < 86400000) { // Less than 24 hours
+            const hours = Math.floor(diff / 3600000);
+            return `${hours}h ago`;
+        } else {
+            return messageTime.toLocaleDateString() + ' ' + messageTime.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+    }
+
+    truncateText(text, maxLength) {
+        if (!text || text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    updateSendButton(isProcessing) {
+        if (!this.sendButton) return;
+
+        const icon = this.sendButton.querySelector('i');
+        if (isProcessing) {
+            this.sendButton.disabled = true;
+            this.sendButton.classList.add('processing');
+            if (icon) {
+                icon.className = 'fas fa-spinner fa-spin';
+            }
+        } else {
+            this.sendButton.disabled = false;
+            this.sendButton.classList.remove('processing');
+            if (icon) {
+                icon.className = 'fas fa-paper-plane';
+            }
+        }
+    }
+
+    scrollToBottom() {
+        if (this.chatContainer) {
+            this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+        }
+    }
+
+    setupEventListeners() {
+        if (this.chatForm) {
+            this.chatForm.addEventListener('submit', (e) => this.handleSubmit(e));
+        }
+
+        if (this.messageInput) {
+            // Auto-resize textarea
+            this.messageInput.addEventListener('input', () => {
+                this.autoResizeTextarea();
+            });
+
+            // Handle Enter key
+            this.messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.handleSubmit(e);
+                }
+            });
+
+            // Handle focus/blur for elegant styling
+            this.messageInput.addEventListener('focus', () => {
+                this.messageInput.parentElement.classList.add('focused');
+            });
+
+            this.messageInput.addEventListener('blur', () => {
+                this.messageInput.parentElement.classList.remove('focused');
+            });
+        }
+
+        // Search mode buttons
+        document.querySelectorAll('.search-mode-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const mode = e.target.dataset.mode || e.target.closest('.search-mode-btn').dataset.mode;
+                if (mode) {
+                    this.setSearchMode(mode);
+                }
+            });
+        });
+
+        // Clear chat button
+        const clearChatBtn = document.getElementById('clearChatBtn');
+        if (clearChatBtn) {
+            clearChatBtn.addEventListener('click', () => this.clearChat());
+        }
+    }
+
+    autoResizeTextarea() {
+        if (!this.messageInput) return;
+
+        this.messageInput.style.height = 'auto';
+        const scrollHeight = this.messageInput.scrollHeight;
+        const maxHeight = 120; // Maximum height in pixels
+
+        if (scrollHeight > maxHeight) {
+            this.messageInput.style.height = maxHeight + 'px';
+            this.messageInput.style.overflowY = 'auto';
+        } else {
+            this.messageInput.style.height = scrollHeight + 'px';
+            this.messageInput.style.overflowY = 'hidden';
+        }
+    }
+
     setSearchMode(mode) {
         this.currentSearchMode = mode;
+        localStorage.setItem('rag_search_mode', mode);
 
         // Update UI
         document.querySelectorAll('.search-mode-btn').forEach(btn => {
@@ -433,105 +797,38 @@ class ChatManager {
 
         // Update placeholder
         if (this.messageInput) {
-            if (mode === 'rag') {
-                this.messageInput.placeholder = 'Ask a question about your documents...';
-            } else {
-                this.messageInput.placeholder = 'Search for content in your documents...';
-            }
+            const placeholder = mode === 'rag'
+              ? 'Ask a question about your documents...'
+              : 'Search for specific content in your documents...';
+            this.messageInput.placeholder = placeholder;
         }
 
-        // Save to localStorage
-        localStorage.setItem('rag_search_mode', mode);
-
-        console.log('Search mode set to:', mode);
-    }
-
-    updateSendButton(isProcessing) {
-        if (!this.sendButton) return;
-
-        this.sendButton.disabled = isProcessing;
-
-        const icon = this.sendButton.querySelector('i');
-        if (icon) {
-            if (isProcessing) {
-                icon.className = 'fas fa-spinner fa-spin';
-            } else {
-                icon.className = 'fas fa-paper-plane';
-            }         }
-    }
-
-    autoResizeTextarea() {
-        if (!this.messageInput) return;
-
-        this.messageInput.style.height = 'auto';
-        const newHeight = Math.min(this.messageInput.scrollHeight, 120);
-        this.messageInput.style.height = newHeight + 'px';
-    }
-
-    scrollToBottom() {
-        if (this.chatContainer) {
-            this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
-        }
-    }
-
-    formatMessageContent(content) {
-        if (!content) return '';
-
-        try {
-            // Basic markdown-like formatting
-            let formatted = this.escapeHtml(String(content))
-                // Bold text
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                // Italic text
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                // Code blocks
-                .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-                // Inline code
-                .replace(/`(.*?)`/g, '<code>$1</code>')
-                // Line breaks
-                .replace(/\n/g, '<br>');
-
-            // Convert URLs to links
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            formatted = formatted.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-
-            return formatted;
-        } catch (error) {
-            console.error('Error formatting message content:', error);
-            return this.escapeHtml(String(content));
-        }
-    }
-
-    formatTime(timestamp) {
-        try {
-            return new Date(timestamp).toLocaleTimeString();
-        } catch (error) {
-            return new Date().toLocaleTimeString();
-        }
-    }
-
-    escapeHtml(text) {
-        if (!text) return '';
-        try {
-            const div = document.createElement('div');
-            div.textContent = String(text);
-            return div.innerHTML;
-        } catch (error) {
-            console.error('Error escaping HTML:', error);
-            return String(text);
-        }
+        console.log(`Search mode set to: ${mode}`);
     }
 
     clearChat() {
-        if (this.chatContainer) {
+        if (!this.chatContainer) return;
+
+        // Fade out all messages
+        const messages = this.chatContainer.querySelectorAll('.chat-message');
+        messages.forEach((message, index) => {
+            setTimeout(() => {
+                message.style.opacity = '0';
+                message.style.transform = 'translateY(-20px)';
+            }, index * 50);
+        });
+
+        // Clear after animation
+        setTimeout(() => {
             this.chatContainer.innerHTML = '';
             this.messageHistory = [];
             this.saveMessageHistory();
 
-            if (window.showStatus) {
-                window.showStatus('Chat cleared', 'success');
-            }
-        }
+            // Show welcome message
+            this.addMessage('assistant', 'Chat cleared. How can I help you today?');
+        }, messages.length * 50 + 300);
+
+        console.log('Chat cleared');
     }
 
     saveMessageHistory() {
@@ -547,50 +844,42 @@ class ChatManager {
         try {
             const savedHistory = localStorage.getItem('rag_chat_history');
             if (savedHistory) {
-                const history = JSON.parse(savedHistory);
-                this.messageHistory = history;
-
-                // Recreate messages in DOM
-                if (this.chatContainer) {
-                    this.chatContainer.innerHTML = '';
-                    history.forEach(messageData => {
-                        const messageElement = this.createMessageElement(messageData);
-                        this.chatContainer.appendChild(messageElement);
-                    });
-                    this.scrollToBottom();
-                }
+                this.messageHistory = JSON.parse(savedHistory);
+                this.renderMessageHistory();
+            } else {
+                // Show welcome message
+                this.addMessage('assistant', 'Hello! I\'m your AI assistant. I can help you search through your documents and answer questions about them. What would you like to know?');
             }
         } catch (error) {
             console.warn('Failed to load chat history:', error);
+            this.addMessage('assistant', 'Hello! I\'m your AI assistant. How can I help you today?');
         }
     }
 
-    // Public API methods
-    getSearchMode() {
-        return this.currentSearchMode;
-    }
+    renderMessageHistory() {
+        if (!this.chatContainer) return;
 
-    getMessageHistory() {
-        return this.messageHistory;
-    }
+        this.chatContainer.innerHTML = '';
 
-    isProcessingMessage() {
-        return this.isProcessing;
+        this.messageHistory.forEach((messageData, index) => {
+            const messageElement = this.createMessageElement(messageData);
+
+            // Add with staggered animation
+            messageElement.style.opacity = '0';
+            messageElement.style.transform = 'translateY(20px)';
+
+            this.chatContainer.appendChild(messageElement);
+
+            setTimeout(() => {
+                messageElement.style.opacity = '1';
+                messageElement.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+
+        setTimeout(() => {
+            this.scrollToBottom();
+        }, this.messageHistory.length * 100 + 200);
+
+
     }
 }
-
-// Initialize chat manager when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    if (typeof API_BASE_URL !== 'undefined') {
-        window.chatManager = new ChatManager(API_BASE_URL);
-        console.log('Chat manager created and registered');
-    } else {
-        console.error('API_BASE_URL not defined, cannot initialize chat manager');
-    }
-});
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = ChatManager;
-}
-
