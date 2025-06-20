@@ -360,40 +360,22 @@ class ChatManager {
 }
 
     addSourcesAfterTyping(messageElement, metadata) {
-        const sources = metadata.sources || [];
-        if (sources.length === 0) return;
+    const sources = metadata.sources || [];
+    if (sources.length === 0) return;
 
-        const sourcesHTML = this.createSourcesHTML(sources);
-        const sourcesElement = document.createElement('div');
-        sourcesElement.innerHTML = sourcesHTML;
-
-        // Add sources with fade-in animation
-        sourcesElement.style.opacity = '0';
-        sourcesElement.style.transform = 'translateY(10px)';
-        sourcesElement.style.transition = 'all 0.3s ease';
-
-        messageElement.querySelector('.message-content').appendChild(sourcesElement);
-
-        setTimeout(() => {
-            sourcesElement.style.opacity = '1';
-            sourcesElement.style.transform = 'translateY(0)';
-        }, 100);
-
-        // Add metadata
-        if (metadata.responseTime) {
-            const metaElement = document.createElement('div');
-            metaElement.className = 'message-meta';
-            metaElement.innerHTML = `Response time: ${(metadata.responseTime * 1000).toFixed(0)}ms`;
-            metaElement.style.opacity = '0';
-            metaElement.style.transition = 'opacity 0.3s ease';
-
-            messageElement.querySelector('.message-content').appendChild(metaElement);
-
-            setTimeout(() => {
-                metaElement.style.opacity = '1';
-            }, 200);
-        }
+    // CHECK: Don't add sources if they already exist
+    const existingSources = messageElement.querySelector('.message-sources');
+    if (existingSources) {
+        console.log('Sources already exist, skipping...');
+        return;
     }
+
+    const sourcesHTML = this.createSourcesHTML(sources);
+    const sourcesElement = document.createElement('div');
+    sourcesElement.innerHTML = sourcesHTML;
+
+    messageElement.querySelector('.message-bubble').appendChild(sourcesElement);
+}
 
     addMessage(type, content, metadata = {}) {
         if (!this.chatContainer) return;
