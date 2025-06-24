@@ -1,7 +1,8 @@
-module.exports = {
+// RAG Chat Application - Configuration
+window.APP_CONFIG = {
     // API Configuration
-    ragApi: {
-        baseUrl: process.env.RAG_API_URL || 'http://localhost:8000',
+    api: {
+        baseUrl: 'http://localhost:8000',
         timeout: 30000, // 30 seconds
         retryAttempts: 3,
         retryDelay: 1000 // 1 second
@@ -25,7 +26,7 @@ module.exports = {
         ],
         chunkSize: 1024 * 1024, // 1MB chunks for large file uploads
         allowedMimeTypes: [
-                        // Documents
+            // Documents
             'application/pdf',
             'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -84,14 +85,15 @@ module.exports = {
     endpoints: {
         // Document endpoints
         uploadDocument: '/pdf/upload',
-        listDocuments: '/documents/list',
-        deleteDocument: '/documents/{id}',
-        getDocument: '/documents/{id}',
-        documentStats: '/documents/stats',
+        listDocuments: '/pdf/',
+        deleteDocument: '/pdf/{id}',
+        getDocument: '/pdf/{id}',
+        downloadDocument: '/pdf/{id}/download',
+        documentChunks: '/pdf/{id}/chunks',
 
         // Search endpoints
+        search: '/search/',
         ragQuery: '/search/rag',
-        searchDocuments: '/search/search',
 
         // Health check
         health: '/health',
@@ -118,12 +120,10 @@ module.exports = {
         deleteSuccess: 'Document deleted successfully!',
         searchComplete: 'Search completed successfully.',
         settingsSaved: 'Settings saved successfully.'
-    },
-
-    // Development Configuration
-    development: {
-        enableDebugLogs: process.env.NODE_ENV === 'development',
-        mockApi: false,
-        enablePerformanceMetrics: true
     }
 };
+
+// Set global API base URL
+window.API_BASE_URL = window.APP_CONFIG.api.baseUrl;
+
+console.log('Configuration loaded');

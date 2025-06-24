@@ -1,41 +1,34 @@
-// RAG Chat Application - Upload Management
-// Handles file uploads and processing
+// RAG Chat Application - Upload Manager
+// Handles file uploads with progress tracking and validation
 
 class UploadManager {
-    constructor(apiBaseUrl) {
-        this.apiBaseUrl = apiBaseUrl || window.API_BASE_URL;
+    constructor(ragClient) {
+        this.ragClient = ragClient || window.ragClient;
         this.uploadQueue = [];
         this.isUploading = false;
-        this.maxFileSize = 100 * 1024 * 1024; // 100MB
-        this.maxFiles = 100;
-        this.allowedTypes = [
-    'pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'csv',
-    'xlsx', 'xlsm', 'xls', 'pptx', 'ppt', 'json', 'xml', 'html', 'htm',  // Added xlsm
-    'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'gif', 'webp'
-];
+        this.currentUpload = null;
+        this.maxConcurrentUploads = 3;
+        this.retryAttempts = 3;
+
+        console.log('UploadManager initialized with ragClient');
         this.init();
     }
 
     init() {
-        console.log('Initializing Upload Manager...');
         this.setupElements();
         this.setupEventListeners();
-        window.uploadManager = this;
-        console.log('Upload manager initialized');
+        this.setupDragAndDrop();
     }
 
     setupElements() {
         this.uploadForm = document.getElementById('uploadForm');
-        this.uploadArea = document.getElementById('uploadArea');
         this.fileInput = document.getElementById('fileInput');
-        this.titleInput = document.getElementById('titleInput');
-        this.categoryInput = document.getElementById('categoryInput');
+        this.uploadArea = document.getElementById('uploadArea');
         this.uploadProgress = document.getElementById('uploadProgress');
         this.uploadStatus = document.getElementById('uploadStatus');
-
-        if (!this.uploadForm || !this.uploadArea || !this.fileInput) {
-            console.error('Required upload elements not found');
-        }
+        this.progressBar = this.uploadProgress?.querySelector('.progress-bar');
+        this.titleInput = document.getElementById('titleInput');
+        this.categoryInput = document.getElementById('categoryInput');
     }
 
     setupEventListeners() {
@@ -43,236 +36,257 @@ class UploadManager {
             this.uploadForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
         }
 
-        if (this.uploadArea) {
-            // Click to browse
-            this.uploadArea.addEventListener('click', () => {
-                if (this.fileInput) {
-                    this.fileInput.click();
-                }
-            });
-
-            // Drag and drop
-            this.uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
-            this.uploadArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
-            this.uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
-        }
-
         if (this.fileInput) {
             this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         }
 
-        // Prevent default drag behaviors on document
-        document.addEventListener('dragover', (e) => e.preventDefault());
-        document.addEventListener('drop', (e) => e.preventDefault());
-    }
-
-    handleFormSubmit(e) {
-        e.preventDefault();
-
-        if (this.isUploading) {
-            console.log('Upload already in progress');
-            return;
-        }
-
-        const files = this.fileInput?.files;
-        if (!files || files.length === 0) {
-            if (window.showStatus) {
-                window.showStatus('Please select files to upload', 'warning');
-            }
-            return;
-        }
-
-        this.uploadFiles(Array.from(files));
-    }
-
-    handleDragOver(e) {
-        e.preventDefault();
-        e.stopPropagation();
         if (this.uploadArea) {
-            this.uploadArea.classList.add('dragover');
-        }
-    }
-
-    handleDragLeave(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (this.uploadArea) {
-            this.uploadArea.classList.remove('dragover');
-        }
-    }
-
-    handleDrop(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (this.uploadArea) {
-            this.uploadArea.classList.remove('dragover');
-        }
-
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0) {
-            this.uploadFiles(files);
-        }
-    }
-
-    handleFileSelect(e) {
-        const files = Array.from(e.target.files);
-        if (files.length > 0) {
-            this.uploadFiles(files);
-        }
-    }
-
-    async uploadFiles(files) {
-        console.log('Uploading files:', files.map(f => f.name));
-
-        // Validate files
-        const validationResult = this.validateFiles(files);
-        if (!validationResult.valid) {
-            if (window.showStatus) {
-                window.showStatus(validationResult.message, 'error');
-            }
-            return;
-        }
-
-        this.isUploading = true;
-        this.showProgress(true);
-
-        try {
-            const results = [];
-
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                this.updateProgress((i / files.length) * 100, `Uploading ${file.name}...`);
-
-                try {
-                    const result = await this.uploadSingleFile(file);
-                    results.push({ file: file.name, success: true, result });
-                } catch (error) {
-                    console.error(`Failed to upload ${file.name}:`, error);
-                    results.push({ file: file.name, success: false, error: error.message });
-                }
-            }
-
-            this.handleUploadResults(results);
-
-        } catch (error) {
-            console.error('Upload process failed:', error);
-            if (window.showStatus) {
-                window.showStatus('Upload failed: ' + error.message, 'error');
-            }
-        } finally {
-            this.isUploading = false;
-            this.showProgress(false);
-            this.resetForm();
-        }
-    }
-
-    async uploadSingleFile(file) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        // Add optional metadata
-        if (this.titleInput?.value.trim()) {
-            formData.append('title', this.titleInput.value.trim());
-        }
-
-        if (this.categoryInput?.value.trim()) {
-            formData.append('category', this.categoryInput.value.trim());
-        }
-
-        const response = await fetch(`${this.apiBaseUrl}/pdf/upload`, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`HTTP ${response.status}: ${errorData.detail || response.statusText}`);
-        }
-
-        return await response.json();
-    }
-
-    validateFiles(files) {
-        // Check file count
-        if (files.length > this.maxFiles) {
-            return {
-                valid: false,
-                message: `Too many files. Maximum ${this.maxFiles} files allowed.`
-            };
-        }
-
-        // Check each file
-        for (const file of files) {
-            // Check file size
-            if (file.size > this.maxFileSize) {
-                return {
-                    valid: false,
-                    message: `File "${file.name}" is too large. Maximum size is ${window.formatFileSize(this.maxFileSize)}.`
-                };
-            }
-
-            // Check file type
-            const extension = file.name.split('.').pop()?.toLowerCase();
-            if (!extension || !this.allowedTypes.includes(extension)) {
-                return {
-                    valid: false,
-                    message: `File type ".${extension}" is not supported for file "${file.name}".`
-                };
-            }
-        }
-
-        return { valid: true };
-    }
-
-    handleUploadResults(results) {
-        const successful = results.filter(r => r.success);
-        const failed = results.filter(r => !r.success);
-
-        if (successful.length > 0) {
-            const message = `Successfully uploaded ${successful.length} file${successful.length !== 1 ? 's' : ''}`;
-            if (window.showStatus) {
-                window.showStatus(message, 'success');
-            }
-
-            // Refresh document list
-            if (window.documentManager) {
-                window.documentManager.loadDocuments();
-            }
-
-            // Update stats
-            if (window.statsManager) {
-                window.statsManager.loadStats();
-            }
-        }
-
-        if (failed.length > 0) {
-            const message = `Failed to upload ${failed.length} file${failed.length !== 1 ? 's' : ''}`;
-            if (window.showStatus) {
-                window.showStatus(message, 'error');
-            }
-
-            // Show detailed errors
-            failed.forEach(result => {
-                console.error(`Upload failed for ${result.file}:`, result.error);
+            this.uploadArea.addEventListener('click', () => {
+                if (this.fileInput) this.fileInput.click();
             });
         }
     }
 
-    showProgress(show) {
-        if (this.uploadProgress) {
-            this.uploadProgress.style.display = show ? 'block' : 'none';
+    setupDragAndDrop() {
+        if (!this.uploadArea) return;
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            this.uploadArea.addEventListener(eventName, (e) => this.preventDefaults(e), false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            this.uploadArea.addEventListener(eventName, () => this.highlight(), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            this.uploadArea.addEventListener(eventName, () => this.unhighlight(), false);
+        });
+
+        this.uploadArea.addEventListener('drop', (e) => this.handleDrop(e), false);
+    }
+
+    preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    highlight() {
+        this.uploadArea?.classList.add('drag-over');
+    }
+
+    unhighlight() {
+        this.uploadArea?.classList.remove('drag-over');
+    }
+
+    handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        this.handleFiles(files);
+    }
+
+    handleFormSubmit(e) {
+        e.preventDefault();
+        if (this.fileInput?.files.length > 0) {
+            this.handleFiles(this.fileInput.files);
         }
     }
 
-    updateProgress(percentage, status) {
-        const progressBar = this.uploadProgress?.querySelector('.progress-bar');
-        if (progressBar) {
-            progressBar.style.width = `${percentage}%`;
+    handleFileSelect(e) {
+        this.handleFiles(e.target.files);
+    }
+
+    handleFiles(fileList) {
+        const files = Array.from(fileList);
+        console.log(`Processing ${files.length} files for upload`);
+
+        // Validate files
+        const validFiles = [];
+        const errors = [];
+
+        files.forEach(file => {
+            const validation = this.ragClient.validateFile(file);
+            if (validation.valid) {
+                validFiles.push(file);
+            } else {
+                errors.push(`${file.name}: ${validation.errors.join(', ')}`);
+            }
+        });
+
+        // Show validation errors
+        if (errors.length > 0) {
+            this.showErrors(errors);
         }
 
+        // Upload valid files
+        if (validFiles.length > 0) {
+            this.queueUploads(validFiles);
+        }
+    }
+
+    queueUploads(files) {
+        const options = {
+            title: this.titleInput?.value || '',
+            category: this.categoryInput?.value || ''
+        };
+
+        files.forEach(file => {
+            this.uploadQueue.push({
+                file: file,
+                options: { ...options },
+                id: this.generateUploadId(),
+                status: 'queued',
+                progress: 0,
+                attempts: 0
+            });
+        });
+
+        this.processUploadQueue();
+    }
+
+    async processUploadQueue() {
+        if (this.isUploading || this.uploadQueue.length === 0) return;
+
+        this.isUploading = true;
+        this.showUploadProgress();
+
+        const activeUploads = [];
+
+        while (this.uploadQueue.length > 0 || activeUploads.length > 0) {
+            // Start new uploads up to concurrent limit
+            while (activeUploads.length < this.maxConcurrentUploads && this.uploadQueue.length > 0) {
+                const upload = this.uploadQueue.shift();
+                activeUploads.push(this.uploadFile(upload));
+            }
+
+            // Wait for at least one upload to complete
+            if (activeUploads.length > 0) {
+                await Promise.race(activeUploads);
+                // Remove completed uploads
+                for (let i = activeUploads.length - 1; i >= 0; i--) {
+                    if (activeUploads[i].completed) {
+                        activeUploads.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        this.isUploading = false;
+        this.hideUploadProgress();
+        this.resetForm();
+    }
+
+    async uploadFile(uploadItem) {
+        const { file, options, id } = uploadItem;
+        uploadItem.status = 'uploading';
+
+        try {
+            console.log(`Starting upload: ${file.name}`);
+            this.updateUploadStatus(`Uploading ${file.name}...`);
+
+            const formData = this.ragClient.createUploadFormData(file, options);
+
+            const result = await this.ragClient.uploadDocument(formData, (progress) => {
+                uploadItem.progress = progress;
+                this.updateUploadProgress(uploadItem);
+            });
+
+            if (result.success) {
+                uploadItem.status = 'completed';
+                uploadItem.completed = true;
+
+                console.log(`Upload completed: ${file.name}`);
+                this.handleUploadSuccess(result.data, file);
+
+                // Dispatch event for other components
+                const event = new CustomEvent('documentUploaded', {
+                    detail: {
+                        document: result.data,
+                        filename: file.name
+                    }
+                });
+                document.dispatchEvent(event);
+
+            } else {
+                throw new Error(result.error);
+            }
+
+        } catch (error) {
+            console.error(`Upload failed: ${file.name}`, error);
+            uploadItem.attempts++;
+
+            if (uploadItem.attempts < this.retryAttempts) {
+                uploadItem.status = 'retrying';
+                console.log(`Retrying upload: ${file.name} (attempt ${uploadItem.attempts + 1})`);
+
+                // Add back to queue for retry
+                setTimeout(() => {
+                    this.uploadQueue.unshift(uploadItem);
+                }, 2000 * uploadItem.attempts); // Exponential backoff
+
+            } else {
+                uploadItem.status = 'failed';
+                uploadItem.completed = true;
+                this.handleUploadError(error, file);
+            }
+        }
+
+        return uploadItem;
+    }
+
+    updateUploadProgress(uploadItem) {
+        if (this.progressBar) {
+            this.progressBar.style.width = `${uploadItem.progress}%`;
+        }
+
+        this.updateUploadStatus(`Uploading ${uploadItem.file.name}... ${Math.round(uploadItem.progress)}%`);
+    }
+
+    updateUploadStatus(message) {
         if (this.uploadStatus) {
-            this.uploadStatus.textContent = status || 'Uploading...';
+            this.uploadStatus.textContent = message;
+        }
+    }
+
+    showUploadProgress() {
+        if (this.uploadProgress) {
+            this.uploadProgress.style.display = 'block';
+        }
+    }
+
+    hideUploadProgress() {
+        if (this.uploadProgress) {
+            this.uploadProgress.style.display = 'none';
+        }
+
+        if (this.progressBar) {
+            this.progressBar.style.width = '0%';
+        }
+    }
+
+    handleUploadSuccess(document, file) {
+        const message = `${file.name} uploaded successfully`;
+        console.log(message, document);
+
+        if (window.showStatus) {
+            window.showStatus(message, 'success');
+        }
+    }
+
+    handleUploadError(error, file) {
+        const message = `Failed to upload ${file.name}: ${error.message}`;
+        console.error(message);
+
+        if (window.showStatus) {
+            window.showStatus(message, 'error');
+        }
+    }
+
+    showErrors(errors) {
+        const message = 'File validation errors:\n' + errors.join('\n');
+        console.error(message);
+
+        if (window.showStatus) {
+            window.showStatus('Some files were rejected due to validation errors', 'warning');
         }
     }
 
@@ -281,48 +295,59 @@ class UploadManager {
             this.uploadForm.reset();
         }
 
-        if (this.uploadArea) {
-            this.uploadArea.classList.remove('dragover');
-        }
+        if (this.titleInput) this.titleInput.value = '';
+        if (this.categoryInput) this.categoryInput.value = '';
+    }
 
-        this.updateProgress(0, '');
+    generateUploadId() {
+        return 'upload_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
     // Public API methods
-    isUploadInProgress() {
-        return this.isUploading;
+    async uploadSingleFile(file, options = {}) {
+        const validation = this.ragClient.validateFile(file);
+        if (!validation.valid) {
+            throw new Error('File validation failed: ' + validation.errors.join(', '));
+        }
+
+        const formData = this.ragClient.createUploadFormData(file, options);
+        const result = await this.ragClient.uploadDocument(formData);
+
+        if (!result.success) {
+            throw new Error(result.error);
+        }
+
+        return result.data;
     }
 
     getUploadQueue() {
         return [...this.uploadQueue];
     }
 
-    getSupportedTypes() {
-        return [...this.allowedTypes];
+    clearUploadQueue() {
+        this.uploadQueue = [];
     }
 
-    getMaxFileSize() {
-        return this.maxFileSize;
+    isUploadInProgress() {
+        return this.isUploading;
     }
 
-    getMaxFiles() {
-        return this.maxFiles;
+    // Cleanup method
+    cleanup() {
+        this.uploadQueue = [];
+        this.isUploading = false;
+        this.currentUpload = null;
     }
 }
 
-// Initialize upload manager when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    if (window.API_BASE_URL) {
-        window.uploadManager = new UploadManager(window.API_BASE_URL);
-        console.log('Upload manager created and registered');
-    } else {
-        console.error('API_BASE_URL not defined, cannot initialize upload manager');
-    }
-});
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = UploadManager;
+// Create global instance if it doesn't exist
+if (!window.uploadManager) {
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.ragClient) {
+            window.uploadManager = new UploadManager(window.ragClient);
+            console.log('Global UploadManager created');
+        }
+    });
 }
 
 console.log('Upload manager loaded');

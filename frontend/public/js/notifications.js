@@ -275,14 +275,9 @@ class NotificationManager {
 }
 
 // Global notification function
-window.showStatus = function(message, type = 'info', duration = 5000, options = {}) {
-    if (window.notificationManager) {
-        return window.notificationManager.show(message, type, duration, options);
-    } else {
-        // Fallback to console if notification manager not available
-        console.log(`[${type.toUpperCase()}] ${message}`);
-        return null;
-    }
+window.showStatus = function(message, type, duration) {
+    // Only log to console, don't show popups
+    console.log(`Status: ${type} - ${message}`);
 };
 
 // Additional global convenience functions

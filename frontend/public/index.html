@@ -12,59 +12,6 @@
     <link href="css/style.css" rel="stylesheet">
     <link href="css/documents.css" rel="stylesheet">
     <link href="css/chat.css" rel="stylesheet">
-
-    <script>
-window.downloadDocument = function(documentId) {
-    console.log('📥 HTML Download called with ID:', documentId);
-
-    // Get document ID from multiple sources
-    if (!documentId) {
-        // Try getting from modal
-        const modal = document.getElementById('documentViewerModal');
-        documentId = modal ? modal.getAttribute('data-current-document-id') : null;
-        console.log('📄 Got ID from modal:', documentId);
-
-        // Try getting from download button itself
-        if (!documentId) {
-            const downloadBtn = document.getElementById('modalDownloadBtn');
-            documentId = downloadBtn ? downloadBtn.getAttribute('data-document-id') : null;
-            console.log('📄 Got ID from button:', documentId);
-        }
-
-        // Try getting from document viewer content
-        if (!documentId) {
-            const viewerContent = document.getElementById('documentViewerContent');
-            if (viewerContent) {
-                const downloadBtns = viewerContent.querySelectorAll('[data-document-id]');
-                if (downloadBtns.length > 0) {
-                    documentId = downloadBtns[0].getAttribute('data-document-id');
-                    console.log('📄 Got ID from viewer content:', documentId);
-                }
-            }
-        }
-    }
-
-    if (!documentId || documentId === 'undefined') {
-        console.error('❌ No valid document ID found');
-        alert('No document selected for download');
-        return;
-    }
-
-    console.log('📥 Final document ID:', documentId);
-
-    // Call the main download function from documents.js
-    if (window.documentManager && typeof window.documentManager.downloadDocument === 'function') {
-        console.log('📂 Calling documentManager.downloadDocument');
-        window.documentManager.downloadDocument(documentId);
-    } else if (window.ragApp && window.ragApp.managers && window.ragApp.managers.documentManager) {
-        console.log('📂 Calling ragApp documentManager');
-        window.ragApp.managers.documentManager.downloadDocument(documentId);
-    } else {
-        console.error('❌ No document manager found');
-        alert('Download service not available');
-    }
-};
-</script>
 </head>
 <body>
     <!-- Header -->
@@ -133,7 +80,7 @@ window.downloadDocument = function(documentId) {
                             </button>
 
                             <div id="uploadProgress" class="upload-progress" style="display: none;">
-                                <div class="progress">
+                                                                <div class="progress">
                                     <div class="progress-bar" role="progressbar" style="width: 0%"></div>
                                 </div>
                                 <small id="uploadStatus">Preparing upload...</small>
@@ -286,58 +233,54 @@ window.downloadDocument = function(documentId) {
     </main>
 
     <!-- Document Viewer Modal -->
-    <!-- Document Viewer Modal -->
-<div id="documentViewerModal" class="modal">
-    <div class="modal-content modal-large">
-        <div class="modal-header">
-            <h3 id="documentViewerTitle">Document Viewer</h3>
-            <div class="modal-actions">
-                <button class="btn btn-sm btn-outline" id="modalDownloadBtn" onclick="window.downloadDocument()" title="Download">
-    <i class="fas fa-download"></i>
-</button>
-                <button class="btn btn-sm btn-outline" id="viewChunksBtn" title="View Chunks">
-                    <i class="fas fa-list"></i>
-                </button>
-                <span class="close" id="closeDocumentViewer">&times;</span>
-            </div>
-        </div>
-        <div class="modal-body">
-            <div id="documentViewerContent">
-                <!-- Add the missing iframe that your documents.js is looking for -->
-                <iframe id="documentViewerIframe"
-                        src=""
-                        width="100%"
-                        height="600px"
-                        frameborder="0"
-                        style="border: 1px solid #ddd; border-radius: 4px;">
-                </iframe>
-
-                <!-- Alternative content areas for different document types -->
-                <div id="documentImageContainer" style="display: none; text-align: center;">
-                    <img id="documentImage" src="" alt="Document" style="max-width: 100%; height: auto;">
-                </div>
-
-                <div id="documentTextContainer" style="display: none; padding: 20px; background: #f9f9f9; border-radius: 4px;">
-                    <pre id="documentText" style="white-space: pre-wrap; font-family: inherit;"></pre>
-                </div>
-
-                <div id="documentLoadingContainer" class="loading-container">
-                    <div class="loading-spinner"></div>
-                    <div class="loading-text">Loading document...</div>
-                </div>
-
-                <div id="documentErrorContainer" class="error-container" style="display: none;">
-                    <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
-                    <div class="error-text">Failed to load document</div>
-                    <button class="btn btn-sm btn-primary" onclick="retryLoadDocument()">
-                        <i class="fas fa-retry"></i> Retry
+    <div id="documentViewerModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="documentViewerTitle">Document Viewer</h3>
+                <div class="modal-actions">
+                    <button class="btn btn-sm btn-outline" id="modalDownloadBtn" onclick="window.downloadDocument()" title="Download">
+                        <i class="fas fa-download"></i>
                     </button>
+                    <button class="btn btn-sm btn-outline" id="viewChunksBtn" title="View Chunks">
+                        <i class="fas fa-list"></i>
+                    </button>
+                    <span class="close" id="closeDocumentViewer">&times;</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="documentViewerContent">
+                    <iframe id="documentViewerIframe"
+                            src=""
+                            width="100%"
+                            height="600px"
+                            frameborder="0"
+                            style="border: 1px solid #ddd; border-radius: 4px;">
+                    </iframe>
+
+                    <div id="documentImageContainer" style="display: none; text-align: center;">
+                        <img id="documentImage" src="" alt="Document" style="max-width: 100%; height: auto;">
+                    </div>
+
+                    <div id="documentTextContainer" style="display: none; padding: 20px; background: #f9f9f9; border-radius: 4px;">
+                        <pre id="documentText" style="white-space: pre-wrap; font-family: inherit;"></pre>
+                    </div>
+
+                    <div id="documentLoadingContainer" class="loading-container">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">Loading document...</div>
+                    </div>
+
+                    <div id="documentErrorContainer" class="error-container" style="display: none;">
+                        <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+                        <div class="error-text">Failed to load document</div>
+                        <button class="btn btn-sm btn-primary" onclick="retryLoadDocument()">
+                            <i class="fas fa-retry"></i> Retry
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-
 
     <!-- Help Modal -->
     <div id="helpModal" class="modal">
@@ -374,201 +317,26 @@ window.downloadDocument = function(documentId) {
 
     <!-- Status Container -->
     <div class="status-container" id="statusContainer"></div>
-
-    <!-- Global Configuration Script -->
     <script>
-        // Global configuration
-        window.API_BASE_URL = 'http://localhost:8000';
-        window.APP_CONFIG = {
-            upload: {
-                allowedTypes: [
-                    'pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'csv',
-                    'xlsx', 'xls', 'pptx', 'ppt', 'json', 'xml', 'html', 'htm',
-                    'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'gif', 'webp'
-                ],
-                maxFileSize: 100 * 1024 * 1024, // 100MB
-                maxBulkFiles: 20
-            },
-            search: {
-                defaultLimit: 10,
-                maxLimit: 50,
-                suggestionsLimit: 5
-            }
-        };
+    // Global configuration - make sure this is set BEFORE loading other scripts
+    window.API_BASE_URL = 'http://localhost:8000';
+    console.log('API_BASE_URL set to:', window.API_BASE_URL);
+</script>
 
-        // Global state
-        window.isConnected = false;
-        window.currentSearchMode = 'rag';
-        window.isDarkMode = false;
-
-        // Utility functions
-        window.escapeHtml = (text) => {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = String(text);
-            return div.innerHTML;
-        };
-
-        window.formatFileSize = (bytes) => {
-            if (!bytes || isNaN(bytes)) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        };
-
-        window.formatTimestamp = (timestamp) => {
-            if (!timestamp) return 'Unknown';
-            try {
-                const date = new Date(timestamp);
-                return date.toLocaleString();
-            } catch (error) {
-                return 'Invalid Date';
-            }
-        };
-
-        // Search mode management
-        window.setSearchMode = (mode) => {
-            window.currentSearchMode = mode;
-            localStorage.setItem('rag_search_mode', mode);
-
-            // Update UI
-            document.querySelectorAll('.search-mode-btn').forEach(btn => {
-                btn.classList.remove('active');
-                if (btn.dataset.mode === mode) {
-                    btn.classList.add('active');
-                }
-            });
-
-            // Update placeholder
-            const messageInput = document.getElementById('messageInput');
-            if (messageInput) {
-                if (mode === 'rag') {
-                    messageInput.placeholder = 'Ask a question about your documents...';
-                } else {
-                    messageInput.placeholder = 'Search for specific content...';
-                }
-            }
-
-            console.log(`Search mode set to: ${mode}`);
-        };
-
-        // Advanced search management
-        window.toggleAdvancedSearch = () => {
-            const panel = document.getElementById('advancedSearchPanel');
-            if (panel) {
-                const isVisible = panel.style.display !== 'none';
-                panel.style.display = isVisible ? 'none' : 'block';
-
-                // Update button text
-                const btn = document.querySelector('[onclick="toggleAdvancedSearch()"]');
-                if (btn) {
-                    const icon = btn.querySelector('i');
-                    if (icon) {
-                        icon.className = isVisible ? 'fas fa-cog' : 'fas fa-times';
-                    }
-                }
-            }
-        };
-
-        window.resetAdvancedSearch = () => {
-            document.getElementById('filterDocType').value = '';
-            document.getElementById('filterCategory').value = '';
-            document.getElementById('maxResults').value = '10';
-        };
-
-        window.applyAdvancedSearch = () => {
-            const filters = {
-                docType: document.getElementById('filterDocType').value,
-                category: document.getElementById('filterCategory').value,
-                maxResults: parseInt(document.getElementById('maxResults').value)
-            };
-
-            // Apply filters to search
-            if (window.searchManager && window.searchManager.setFilters) {
-                window.searchManager.setFilters(filters);
-            }
-
-            // Hide advanced panel
-            window.toggleAdvancedSearch();
-
-            console.log('Advanced search filters applied:', filters);
-        };
-
-        // Search history management
-        window.showSearchHistory = () => {
-            if (window.searchManager && window.searchManager.showSearchHistory) {
-                window.searchManager.showSearchHistory();
-            }
-        };
-
-        // Status display
-        window.showStatus = (message, type = 'info', duration = 3000) => {
-            const container = document.getElementById('statusContainer');
-            if (!container) return;
-
-            const statusElement = document.createElement('div');
-            statusElement.className = `status-message status-${type}`;
-            statusElement.innerHTML = `
-                <span class="status-icon">${getStatusIcon(type)}</span>
-                <span class="status-text">${window.escapeHtml(message)}</span>
-                <button class="status-close" onclick="this.parentElement.remove()">×</button>
-            `;
-
-            container.appendChild(statusElement);
-
-            if (duration > 0) {
-                setTimeout(() => {
-                    if (statusElement.parentElement) {
-                        statusElement.remove();
-                    }
-                }, duration);
-            }
-        };
-
-        function getStatusIcon(type) {
-            const icons = {
-                success: '✅',
-                error: '❌',
-                warning: '⚠️',
-                info: 'ℹ️'
-            };
-            return icons[type] || icons.info;
-        }
-
-        // Initialize on DOM ready
-        document.addEventListener('DOMContentLoaded', () => {
-            // Load saved search mode
-            const savedMode = localStorage.getItem('rag_search_mode') || 'rag';
-            window.setSearchMode(savedMode);
-
-            // Load saved theme
-            const savedTheme = localStorage.getItem('rag_theme') || 'light';
-            if (savedTheme === 'dark') {
-                document.body.classList.add('theme-dark');
-                window.isDarkMode = true;
-                const themeIcon = document.getElementById('themeIcon');
-                if (themeIcon) {
-                    themeIcon.className = 'fas fa-sun';
-                }
-            }
-
-            console.log('RAG Application HTML initialized');
-        });
-    </script>
-
-    <!-- JavaScript Files -->
-    <script src="js/utils.js"></script>
-    <script src="js/theme.js"></script>
+    <!-- JavaScript Files - Optimized Loading Order -->
+    <script src="js/config.js"></script>           <!-- Configuration first -->
+    <script src="js/ragClient.js"></script>        <!-- API client second -->
+    <script src="js/utils.js"></script>            <!-- Utilities third -->
+    <script src="js/theme.js"></script>            <!-- UI utilities -->
     <script src="js/keyboard.js"></script>
     <script src="js/modal.js"></script>
     <script src="js/notifications.js"></script>
-    <script src="js/upload.js"></script>
+    <script src="js/upload.js"></script>           <!-- Feature modules -->
     <script src="js/search.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/documents.js"></script>
     <script src="js/stats.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app.js"></script>              <!-- Main controller last -->
 
     <!-- Service Worker Registration -->
     <script>

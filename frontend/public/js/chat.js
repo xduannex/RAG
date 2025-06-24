@@ -2,8 +2,31 @@
 // Handles chat interface, message sending, and RAG responses with elegant animations
 
 class ChatManager {
-    constructor(apiBaseUrl) {
-        this.apiBaseUrl = apiBaseUrl;
+    constructor(apiBaseUrlOrClient) {  // <- Change parameter name here
+        // Ensure apiBaseUrl is properly set with fallbacks
+        this.apiBaseUrl = apiBaseUrlOrClient || window.API_BASE_URL || 'http://localhost:8000';
+
+        console.log('ChatManager API Base URL:', this.apiBaseUrl);
+
+        if (typeof apiBaseUrlOrClient === 'string') {  // <- Now matches parameter
+            this.apiBaseUrl = apiBaseUrlOrClient;
+        } else if (apiBaseUrlOrClient && typeof apiBaseUrlOrClient === 'object' && apiBaseUrlOrClient.baseURL) {
+            // Extract baseURL string from RAGClient object
+            this.apiBaseUrl = String(apiBaseUrlOrClient.baseURL);
+            this.ragClient = apiBaseUrlOrClient;
+        } else {
+            this.apiBaseUrl = 'http://localhost:8000';
+        }
+
+        // Force ensure it's a string, not an object
+        this.apiBaseUrl = String(this.apiBaseUrl);
+
+        console.log('ChatManager API Base URL (final):', this.apiBaseUrl);
+        console.log('Type check:', typeof this.apiBaseUrl);
+
+        // ... rest of constructor
+
+
         this.chatContainer = null;
         this.messageInput = null;
         this.sendButton = null;
@@ -188,32 +211,42 @@ class ChatManager {
     }
 
     async sendRAGQuery(query) {
+    try {
         console.log('Sending RAG query:', query);
+        console.log('Using API Base URL:', this.apiBaseUrl);
 
-        const requestData = {
+        const payload = {
             query: query,
             max_results: 5,
-            model: "llama3.2:latest",
             similarity_threshold: 0.3,
-            include_context: true
+            model: 'llama3.2:latest'
         };
 
-        const response = await fetch(`${this.apiBaseUrl}/search/rag`, {
+        // Make sure the URL is properly constructed
+        const url = `${this.apiBaseUrl}/search/rag`;
+        console.log('Full request URL:', url);
+
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
             },
-            body: JSON.stringify(requestData)
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`RAG query failed: ${response.statusText} - ${errorData.detail || ''}`);
+            const errorText = await response.text();
+            console.error('Response status:', response.status);
+            console.error('Response text:', errorText);
+            throw new Error(`RAG query failed: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         return await response.json();
+    } catch (error) {
+        console.error('RAG query error:', error);
+        throw error;
     }
+}
 
     async sendSearchQuery(query) {
         console.log('Sending search query:', query);
@@ -524,86 +557,92 @@ class ChatManager {
     }
 
     createSourcesHTML(sources) {
-        if (!sources || sources.length === 0) return '';
+    if (!sources || sources.length === 0) return '';
 
-        const sourcesHTML = sources.map((source, index) => {
-            const relevancePercentage = Math.round(source.score * 100);
-            const previewText = this.truncateText(source.content, 150);
-
-            return `
-                <div class="source-item" data-document-id="${source.document_id}">
-                    <div class="source-header">
-                        <div class="source-title">
-                            <i class="fas fa-file-alt"></i>
-                            <span>${this.escapeHtml(source.title || source.filename || 'Unknown Document')}</span>
-                        </div>
-                        <div class="source-relevance">
-                            <span class="relevance-score">${relevancePercentage}%</span>
-                        </div>
-                    </div>
-                    <div class="source-preview">
-                        "${this.escapeHtml(previewText)}"
-                    </div>
-                    <div class="source-actions">
-                        <button class="btn btn-sm btn-outline" onclick="window.documentManager?.openDocumentViewer(${source.document_id})" title="View Document">
-                            <i class="fas fa-eye"></i> View
-                        </button>
-                        ${source.page_number ? `<span class="source-page">Page ${source.page_number}</span>` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
+    const sourcesHTML = sources.map((source, index) => {
+        // Fix relevance percentage calculation
+        const score = source.score || source.similarity_score || 0;
+        const relevancePercentage = Math.round(score * 100);
+        const displayPercentage = isNaN(relevancePercentage) ? 0 : relevancePercentage;
+        const previewText = this.truncateText(source.content, 150);
 
         return `
-            <div class="message-sources">
-                <div class="sources-header">
-                    <i class="fas fa-link"></i>
-                    <span>Sources (${sources.length})</span>
+            <div class="source-item" data-document-id="${source.document_id}">
+                <div class="source-header">
+                    <div class="source-title">
+                        <i class="fas fa-file-alt"></i>
+                        <span>${this.escapeHtml(source.title || source.filename || 'Unknown Document')}</span>
+                    </div>
+                    <div class="source-relevance">
+                        <span class="relevance-score">${displayPercentage}%</span>
+                    </div>
                 </div>
-                <div class="sources-list">
-                    ${sourcesHTML}
+                <div class="source-preview">
+                    "${this.escapeHtml(previewText)}"
+                </div>
+                <div class="source-actions">
+                    <button class="btn btn-sm btn-outline" onclick="window.documentManager?.openDocumentViewer(${source.document_id})" title="View Document">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                    ${source.page_number ? `<span class="source-page">Page ${source.page_number}</span>` : ''}
                 </div>
             </div>
         `;
-    }
+    }).join('');
+
+    return `
+        <div class="message-sources">
+            <div class="sources-header">
+                <i class="fas fa-link"></i>
+                <span>Sources (${sources.length})</span>
+            </div>
+            <div class="sources-list">
+                ${sourcesHTML}
+            </div>
+        </div>
+    `;
+}
 
     createSearchResultsHTML(results) {
-        if (!results || results.length === 0) return '';
+    if (!results || results.length === 0) return '';
 
-        const resultsHTML = results.map((result, index) => {
-            const relevancePercentage = Math.round(result.score * 100);
-            const previewText = this.truncateText(result.content, 200);
-
-            return `
-                <div class="search-result-item" data-document-id="${result.document_id}">
-                    <div class="result-header">
-                        <div class="result-number">${index + 1}</div>
-                        <div class="result-title">
-                            <span>${this.escapeHtml(result.title || result.filename || 'Unknown Document')}</span>
-                        </div>
-                        <div class="result-relevance">
-                            <span class="relevance-score">${relevancePercentage}%</span>
-                        </div>
-                    </div>
-                    <div class="result-preview">
-                        ${this.highlightSearchTerms(this.escapeHtml(previewText), result.query)}
-                    </div>
-                    <div class="result-actions">
-                        <button class="btn btn-sm btn-primary" onclick="window.documentManager?.openDocumentViewer(${result.document_id})" title="View Document">
-                            <i class="fas fa-eye"></i> View Document
-                        </button>
-                        ${result.page_number ? `<span class="result-page">Page ${result.page_number}</span>` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
+    const resultsHTML = results.map((result, index) => {
+        // Fix relevance percentage calculation
+        const score = result.score || result.similarity_score || 0;
+        const relevancePercentage = Math.round(score * 100);
+        const displayPercentage = isNaN(relevancePercentage) ? 0 : relevancePercentage;
+        const previewText = this.truncateText(result.content, 200);
 
         return `
-            <div class="search-results">
-                ${resultsHTML}
+            <div class="search-result-item" data-document-id="${result.document_id}">
+                <div class="result-header">
+                    <div class="result-number">${index + 1}</div>
+                    <div class="result-title">
+                        <span>${this.escapeHtml(result.title || result.filename || 'Unknown Document')}</span>
+                    </div>
+                    <div class="result-relevance">
+                        <span class="relevance-score">${displayPercentage}%</span>
+                    </div>
+                </div>
+                <div class="result-preview">
+                    ${this.highlightSearchTerms(this.escapeHtml(previewText), result.query)}
+                </div>
+                <div class="result-actions">
+                    <button class="btn btn-sm btn-primary" onclick="window.documentManager?.openDocumentViewer(${result.document_id})" title="View Document">
+                        <i class="fas fa-eye"></i> View Document
+                    </button>
+                    ${result.page_number ? `<span class="result-page">Page ${result.page_number}</span>` : ''}
+                </div>
             </div>
         `;
-    }
+    }).join('');
+
+    return `
+        <div class="search-results">
+            ${resultsHTML}
+        </div>
+    `;
+}
 
     highlightSearchTerms(text, query) {
         if (!query) return text;
@@ -863,5 +902,8 @@ class ChatManager {
         }, this.messageHistory.length * 100 + 200);
 
 
+
     }
+
+
 }

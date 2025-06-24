@@ -374,7 +374,7 @@ app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 app.include_router(pdfs.router, prefix="/api/pdfs", tags=["PDF Management"])
 
 # New universal documents route
-app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
+app.include_router(documents.router, prefix="/documents", tags=["documents"])
 
 
 # Root endpoint

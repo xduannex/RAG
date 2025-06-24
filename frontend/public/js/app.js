@@ -3,10 +3,11 @@
 
 class RAGApplication {
     constructor() {
-        this.apiBaseUrl = window.API_BASE_URL || 'http://localhost:8000';
+        this.apiBaseUrl = window.APP_CONFIG?.api?.baseUrl || 'http://localhost:8000';
         this.isOnline = navigator.onLine;
         this.connectionStatus = 'disconnected';
         this.managers = {};
+        this.ragClient = window.ragClient;
 
         try {
             this.setupManagers();
@@ -22,42 +23,35 @@ class RAGApplication {
     setupManagers() {
         console.log('Setting up managers...');
 
-        // Add checks for required dependencies
-        if (!window.API_BASE_URL) {
-            console.warn('API_BASE_URL not defined, using default');
-            window.API_BASE_URL = this.apiBaseUrl;
-        }
-
         try {
             // Initialize each manager with error handling
             console.log('Creating SearchManager...');
             if (typeof SearchManager !== 'undefined') {
-                this.searchManager = new SearchManager(this.apiBaseUrl);
+                this.searchManager = new SearchManager(this.ragClient);
                 this.managers.search = this.searchManager;
             } else {
                 console.warn('SearchManager class not found');
             }
 
             console.log('Creating UploadManager...');
-if (typeof UploadManager !== 'undefined') {
-    // Check if UploadManager already exists globally
-    if (window.uploadManager) {
-        console.log('UploadManager already exists, using existing instance');
-        this.uploadManager = window.uploadManager;
-        this.managers.upload = this.uploadManager;
-    } else {
-        console.log('Creating new UploadManager instance');
-        this.uploadManager = new UploadManager(this.apiBaseUrl);
-        this.managers.upload = this.uploadManager;
-        window.uploadManager = this.uploadManager; // Register globally
-    }
-} else {
-    console.warn('UploadManager class not found');
-}
+            if (typeof UploadManager !== 'undefined') {
+                if (window.uploadManager) {
+                    console.log('UploadManager already exists, using existing instance');
+                    this.uploadManager = window.uploadManager;
+                    this.managers.upload = this.uploadManager;
+                } else {
+                    console.log('Creating new UploadManager instance');
+                    this.uploadManager = new UploadManager(this.ragClient);
+                    this.managers.upload = this.uploadManager;
+                    window.uploadManager = this.uploadManager;
+                }
+            } else {
+                console.warn('UploadManager class not found');
+            }
 
             console.log('Creating DocumentManager...');
             if (typeof DocumentManager !== 'undefined') {
-                this.documentManager = new DocumentManager(this.apiBaseUrl);
+                this.documentManager = new DocumentManager(this.ragClient);
                 this.managers.document = this.documentManager;
             } else {
                 console.warn('DocumentManager class not found');
@@ -65,16 +59,15 @@ if (typeof UploadManager !== 'undefined') {
 
             console.log('Creating StatsManager...');
             if (typeof StatsManager !== 'undefined') {
-                this.statsManager = new StatsManager(this.apiBaseUrl);
+                this.statsManager = new StatsManager(this.ragClient);
                 this.managers.stats = this.statsManager;
             } else {
                 console.warn('StatsManager class not found');
             }
 
-            // Create ChatManager if it exists
             console.log('Creating ChatManager...');
             if (typeof ChatManager !== 'undefined') {
-                this.chatManager = new ChatManager(this.apiBaseUrl);
+                this.chatManager = new ChatManager(this.ragClient);
                 this.managers.chat = this.chatManager;
             } else {
                 console.warn('ChatManager class not found - creating basic chat functionality');
@@ -90,30 +83,18 @@ if (typeof UploadManager !== 'undefined') {
     }
 
     createBasicChatManager() {
-        // Create a basic chat manager if the full one doesn't exist
         this.chatManager = {
             messages: [],
             currentMode: 'rag',
+            ragClient: this.ragClient,
 
             async sendMessage(message, mode = 'rag') {
                 try {
-                    const response = await fetch(this.apiBaseUrl + '/search/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            query: message,
-                            mode: mode,
-                            limit: 10
-                        })
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('HTTP error! status: ' + response.status);
+                    const result = await this.ragClient.search(message, { mode, limit: 10 });
+                    if (!result.success) {
+                        throw new Error(result.error);
                     }
-
-                    return await response.json();
+                    return result.data;
                 } catch (error) {
                     console.error('Chat error:', error);
                     throw error;
@@ -295,19 +276,13 @@ if (typeof UploadManager !== 'undefined') {
 
     async checkAPIHealth() {
         try {
-            const response = await fetch(this.apiBaseUrl + '/health', {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' }
-            });
-
-            if (response.ok) {
-                const health = await response.json();
+            const result = await this.ragClient.healthCheck();
+            if (result.success) {
                 this.updateConnectionStatus('connected');
-                console.log('🟢 API health check passed:', health);
+                console.log('🟢 API health check passed:', result.data);
             } else {
-                throw new Error('Health check failed: ' + response.status);
+                throw new Error(result.error);
             }
-
         } catch (error) {
             console.warn('🟡 API health check failed:', error);
             this.updateConnectionStatus('disconnected');
@@ -926,12 +901,12 @@ if (typeof UploadManager !== 'undefined') {
 // Enhanced DocumentManager class if it doesn't exist
 if (typeof DocumentManager === 'undefined') {
     window.DocumentManager = class DocumentManager {
-        constructor(apiBaseUrl) {
-            this.apiBaseUrl = apiBaseUrl || window.API_BASE_URL || 'http://localhost:8000';
+        constructor(ragClient) {
+            this.ragClient = ragClient || window.ragClient;
             this.documents = [];
             this.currentDocument = null;
             this.isLoading = false;
-            console.log('DocumentManager created with API base URL:', this.apiBaseUrl);
+            console.log('DocumentManager created with ragClient');
         }
 
         async initialize() {
@@ -1029,23 +1004,16 @@ if (typeof DocumentManager === 'undefined') {
             this.showLoadingIndicator();
 
             try {
-                const response = await fetch(this.apiBaseUrl + '/pdf/', {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
-                });
+                const result = await this.ragClient.listDocuments();
 
-                if (!response.ok) {
-                    throw new Error('HTTP error! status: ' + response.status);
+                if (result.success) {
+                    this.documents = result.data;
+                    this.renderDocuments();
+                    this.updateDocumentsCount();
+                    console.log('Loaded ' + this.documents.length + ' documents');
+                } else {
+                    throw new Error(result.error);
                 }
-
-                this.documents = await response.json();
-                this.renderDocuments();
-                this.updateDocumentsCount();
-
-                console.log('Loaded ' + this.documents.length + ' documents');
 
             } catch (error) {
                 console.error('Error loading documents:', error);
@@ -1325,19 +1293,12 @@ if (typeof DocumentManager === 'undefined') {
 
         async getDocumentById(documentId) {
             try {
-                const response = await fetch(this.apiBaseUrl + '/pdf/' + documentId, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error('HTTP error! status: ' + response.status);
+                const result = await this.ragClient.getDocument(documentId);
+                if (result.success) {
+                    return result.data;
+                } else {
+                    throw new Error(result.error);
                 }
-
-                return await response.json();
             } catch (error) {
                 console.error('Error fetching document:', error);
                 throw error;
@@ -1350,36 +1311,24 @@ if (typeof DocumentManager === 'undefined') {
             }
 
             try {
-                const response = await fetch(this.apiBaseUrl + '/pdf/' + documentId, {
-                    method: 'DELETE',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
+                const result = await this.ragClient.deleteDocument(documentId);
+
+                if (result.success) {
+                    this.documents = this.documents.filter(doc => doc.id !== documentId);
+                    this.renderDocuments();
+                    this.updateDocumentsCount();
+
+                    const event = new CustomEvent('documentDeleted', {
+                        detail: { documentId: documentId }
+                    });
+                    document.dispatchEvent(event);
+
+                    if (window.showStatus) {
+                        window.showStatus('Document deleted successfully', 'success');
                     }
-                                    });
-
-                if (!response.ok) {
-                    throw new Error('HTTP error! status: ' + response.status);
+                } else {
+                    throw new Error(result.error);
                 }
-
-                // Remove from local array
-                this.documents = this.documents.filter(doc => doc.id !== documentId);
-
-                // Re-render
-                this.renderDocuments();
-                this.updateDocumentsCount();
-
-                // Dispatch event
-                const event = new CustomEvent('documentDeleted', {
-                    detail: { documentId: documentId }
-                });
-                document.dispatchEvent(event);
-
-                if (window.showStatus) {
-                    window.showStatus('Document deleted successfully', 'success');
-                }
-
-                console.log('Document deleted:', documentId);
 
             } catch (error) {
                 console.error('Error deleting document:', error);
@@ -1391,36 +1340,24 @@ if (typeof DocumentManager === 'undefined') {
 
         async downloadDocument(documentId) {
             try {
-                const response = await fetch(this.apiBaseUrl + '/pdf/' + documentId + '/download', {
-                    method: 'GET'
-                });
+                const result = await this.ragClient.downloadDocument(documentId);
 
-                if (!response.ok) {
-                    throw new Error('HTTP error! status: ' + response.status);
-                }
+                if (result.success) {
+                    const blob = result.data;
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `document_${documentId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
 
-                const blob = await response.blob();
-                const contentDisposition = response.headers.get('Content-Disposition');
-                let filename = 'document_' + documentId;
-
-                if (contentDisposition) {
-                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-                    if (filenameMatch) {
-                        filename = filenameMatch[1];
+                    if (window.showStatus) {
+                        window.showStatus('Document downloaded successfully', 'success');
                     }
-                }
-
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-
-                if (window.showStatus) {
-                    window.showStatus('Document downloaded successfully', 'success');
+                } else {
+                    throw new Error(result.error);
                 }
 
             } catch (error) {
@@ -1433,20 +1370,13 @@ if (typeof DocumentManager === 'undefined') {
 
         async viewDocumentChunks(documentId) {
             try {
-                const response = await fetch(this.apiBaseUrl + '/pdf/' + documentId + '/chunks', {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
-                });
+                const result = await this.ragClient.getDocumentChunks(documentId);
 
-                if (!response.ok) {
-                    throw new Error('HTTP error! status: ' + response.status);
+                if (result.success) {
+                    this.displayDocumentChunks(result.data, documentId);
+                } else {
+                    throw new Error(result.error);
                 }
-
-                const chunks = await response.json();
-                this.displayDocumentChunks(chunks, documentId);
 
             } catch (error) {
                 console.error('Error fetching document chunks:', error);
