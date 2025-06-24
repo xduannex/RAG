@@ -7,12 +7,12 @@ class UploadManager {
         this.uploadQueue = [];
         this.isUploading = false;
         this.maxFileSize = 100 * 1024 * 1024; // 100MB
-        this.maxFiles = 20;
+        this.maxFiles = 100;
         this.allowedTypes = [
-            'pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'csv',
-            'xlsx', 'xls', 'pptx', 'ppt', 'json', 'xml', 'html', 'htm',
-            'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'gif', 'webp'
-        ];
+    'pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'csv',
+    'xlsx', 'xlsm', 'xls', 'pptx', 'ppt', 'json', 'xml', 'html', 'htm',  // Added xlsm
+    'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'gif', 'webp'
+];
         this.init();
     }
 

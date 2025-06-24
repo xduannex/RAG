@@ -946,24 +946,59 @@ showSuccess(message) {
 
         for (const endpoint of downloadEndpoints) {
             try {
-                // Create a temporary link to trigger download
-                const link = document.createElement('a');
-                link.href = endpoint;
-                link.target = '_blank';
-                link.download = ''; // Let browser handle filename
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                console.log(`🔗 Trying endpoint: ${endpoint}`); // ADD THIS
 
-                this.showSuccess('Download started');
-                success = true;
-                break;
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': '*/*'
+                    }
+                });
+
+                console.log(`📊 Response status: ${response.status}`); // ADD THIS
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    console.log(`📦 Blob size: ${blob.size} bytes`); // ADD THIS
+
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    console.log(`📄 Content-Disposition: ${contentDisposition}`); // ADD THIS
+
+                    let filename = `document_${documentId}`;
+
+                    // Improved filename extraction
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1].replace(/['"]/g, '');
+                        }
+                    }
+
+                    console.log(`💾 Download filename: ${filename}`); // ADD THIS
+
+                    // Create download
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+
+                    this.showSuccess('Download completed');
+                    success = true;
+                    break;
+                } else {
+                    console.warn(`⚠️ HTTP ${response.status}: ${response.statusText}`); // ADD THIS
+                }
             } catch (error) {
                 console.warn(`⚠️ Download failed from ${endpoint}:`, error);
             }
         }
 
         if (!success) {
+            console.error('❌ All download endpoints failed'); // ADD THIS
             throw new Error('Download failed from all endpoints');
         }
 

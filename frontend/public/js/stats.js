@@ -61,7 +61,7 @@ class StatsManager {
 
     async loadDocumentStats() {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/pdfs/stats/summary`, {
+            const response = await fetch(`${this.apiBaseUrl}/pdf/stats/summary`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json'

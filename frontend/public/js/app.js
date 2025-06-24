@@ -39,12 +39,21 @@ class RAGApplication {
             }
 
             console.log('Creating UploadManager...');
-            if (typeof UploadManager !== 'undefined') {
-                this.uploadManager = new UploadManager(this.apiBaseUrl);
-                this.managers.upload = this.uploadManager;
-            } else {
-                console.warn('UploadManager class not found');
-            }
+if (typeof UploadManager !== 'undefined') {
+    // Check if UploadManager already exists globally
+    if (window.uploadManager) {
+        console.log('UploadManager already exists, using existing instance');
+        this.uploadManager = window.uploadManager;
+        this.managers.upload = this.uploadManager;
+    } else {
+        console.log('Creating new UploadManager instance');
+        this.uploadManager = new UploadManager(this.apiBaseUrl);
+        this.managers.upload = this.uploadManager;
+        window.uploadManager = this.uploadManager; // Register globally
+    }
+} else {
+    console.warn('UploadManager class not found');
+}
 
             console.log('Creating DocumentManager...');
             if (typeof DocumentManager !== 'undefined') {
@@ -1202,77 +1211,110 @@ if (typeof DocumentManager === 'undefined') {
         }
 
         displayDocumentInViewer(document) {
-            if (this.documentViewerTitle) {
-                this.documentViewerTitle.textContent = document.title || document.original_filename;
-            }
+    if (this.documentViewerTitle) {
+        this.documentViewerTitle.textContent = document.title || document.original_filename;
+    }
 
-            if (this.documentViewerContent) {
-                this.documentViewerContent.innerHTML = '<div class="document-viewer-info">' +
-                    '<div class="document-details">' +
-                    '<h4>Document Information</h4>' +
-                    '<div class="detail-grid">' +
-                    '<div class="detail-item">' +
-                    '<strong>Filename:</strong>' +
-                    '<span>' + this.escapeHtml(document.original_filename) + '</span>' +
-                    '</div>' +
-                    '<div class="detail-item">' +
-                    '<strong>File Type:</strong>' +
-                    '<span>' + document.file_type.toUpperCase() + '</span>' +
-                    '</div>' +
-                    '<div class="detail-item">' +
-                    '<strong>File Size:</strong>' +
-                    '<span>' + this.formatFileSize(document.file_size) + '</span>' +
-                    '</div>' +
-                    (document.total_pages ? '<div class="detail-item">' +
-                        '<strong>Pages:</strong>' +
-                        '<span>' + document.total_pages + '</span>' +
-                        '</div>' : '') +
-                    '<div class="detail-item">' +
-                    '<strong>Status:</strong>' +
-                    '<span class="status-badge ' + this.getStatusClass(document.processing_status) + '">' +
-                    document.processing_status +
-                    '</span>' +
-                    '</div>' +
-                    '<div class="detail-item">' +
-                    '<strong>Uploaded:</strong>' +
-                    '<span>' + this.formatTimestamp(document.created_at) + '</span>' +
-                    '</div>' +
-                    (document.processed_at ? '<div class="detail-item">' +
-                        '<strong>Processed:</strong>' +
-                        '<span>' + this.formatTimestamp(document.processed_at) + '</span>' +
-                        '</div>' : '') +
-                    (document.total_chunks ? '<div class="detail-item">' +
-                        '<strong>Text Chunks:</strong>' +
-                        '<span>' + document.total_chunks + '</span>' +
-                        '</div>' : '') +
-                    (document.word_count ? '<div class="detail-item">' +
-                        '<strong>Word Count:</strong>' +
-                        '<span>' + document.word_count.toLocaleString() + '</span>' +
-                        '</div>' : '') +
-                    '</div>' +
-                    (document.description ? '<div class="document-description">' +
-                        '<strong>Description:</strong>' +
-                        '<p>' + this.escapeHtml(document.description) + '</p>' +
-                        '</div>' : '') +
-                    (document.keywords ? '<div class="document-keywords">' +
-                        '<strong>Keywords:</strong>' +
-                        '<p>' + this.escapeHtml(document.keywords) + '</p>' +
-                        '</div>' : '') +
-                    '</div>' +
-                    '<div class="document-actions-panel">' +
-                    '<button class="btn btn-primary" onclick="window.downloadDocument(' + document.id + ')">' +
-                    '<i class="fas fa-download"></i> Download' +
-                    '</button>' +
-                    '<button class="btn btn-secondary" onclick="window.viewDocumentChunks(' + document.id + ')">' +
-                    '<i class="fas fa-list"></i> View Chunks' +
-                    '</button>' +
-                    '<button class="btn btn-info" onclick="window.searchInDocument(' + document.id + ')">' +
-                    '<i class="fas fa-search"></i> Search in Document' +
-                    '</button>' +
-                    '</div>' +
-                    '</div>';
-            }
+    if (this.documentViewerContent) {
+        this.documentViewerContent.innerHTML = '<div class="document-viewer-info">' +
+            '<div class="document-details">' +
+            '<h4>Document Information</h4>' +
+            '<div class="detail-grid">' +
+            '<div class="detail-item">' +
+            '<strong>Filename:</strong>' +
+            '<span>' + this.escapeHtml(document.original_filename) + '</span>' +
+            '</div>' +
+            '<div class="detail-item">' +
+            '<strong>File Type:</strong>' +
+            '<span>' + document.file_type.toUpperCase() + '</span>' +
+            '</div>' +
+            '<div class="detail-item">' +
+            '<strong>File Size:</strong>' +
+            '<span>' + this.formatFileSize(document.file_size) + '</span>' +
+            '</div>' +
+            (document.total_pages ? '<div class="detail-item">' +
+                '<strong>Pages:</strong>' +
+                '<span>' + document.total_pages + '</span>' +
+                '</div>' : '') +
+            '<div class="detail-item">' +
+            '<strong>Status:</strong>' +
+            '<span class="status-badge ' + this.getStatusClass(document.processing_status) + '">' +
+            document.processing_status +
+            '</span>' +
+            '</div>' +
+            '<div class="detail-item">' +
+            '<strong>Uploaded:</strong>' +
+            '<span>' + this.formatTimestamp(document.created_at) + '</span>' +
+            '</div>' +
+            (document.processed_at ? '<div class="detail-item">' +
+                '<strong>Processed:</strong>' +
+                '<span>' + this.formatTimestamp(document.processed_at) + '</span>' +
+                '</div>' : '') +
+            (document.total_chunks ? '<div class="detail-item">' +
+                '<strong>Text Chunks:</strong>' +
+                '<span>' + document.total_chunks + '</span>' +
+                '</div>' : '') +
+            (document.word_count ? '<div class="detail-item">' +
+                '<strong>Word Count:</strong>' +
+                '<span>' + document.word_count.toLocaleString() + '</span>' +
+                '</div>' : '') +
+            '</div>' +
+            (document.description ? '<div class="document-description">' +
+                '<strong>Description:</strong>' +
+                '<p>' + this.escapeHtml(document.description) + '</p>' +
+                '</div>' : '') +
+            (document.keywords ? '<div class="document-keywords">' +
+                '<strong>Keywords:</strong>' +
+                '<p>' + this.escapeHtml(document.keywords) + '</p>' +
+                '</div>' : '') +
+            '</div>' +
+            '<div class="document-actions-panel">' +
+            '<button class="btn btn-primary modal-download-btn" data-document-id="' + document.id + '">' +
+            '<i class="fas fa-download"></i> Download' +
+            '</button>' +
+            '<button class="btn btn-secondary" onclick="window.viewDocumentChunks(' + document.id + ')">' +
+            '<i class="fas fa-list"></i> View Chunks' +
+            '</button>' +
+            '<button class="btn btn-info" onclick="window.searchInDocument(' + document.id + ')">' +
+            '<i class="fas fa-search"></i> Search in Document' +
+            '</button>' +
+            '</div>' +
+            '</div>';
+
+        // Add event listener for the download button in the generated content
+        const downloadBtn = this.documentViewerContent.querySelector('.modal-download-btn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const documentId = e.target.getAttribute('data-document-id') || e.target.closest('button').getAttribute('data-document-id');
+                console.log('Modal download clicked for document:', documentId);
+                this.downloadDocument(documentId);
+            });
         }
+    }
+
+    // Set document ID attributes for the HTML modal elements
+    console.log('🔧 Setting document ID attributes for:', document.id);
+
+    // Set document ID on modal
+    const modal = document.getElementById('documentViewerModal');
+    if (modal) {
+        modal.setAttribute('data-current-document-id', document.id);
+        console.log('✅ Modal ID set to:', document.id);
+    } else {
+        console.error('❌ Modal not found');
+    }
+
+    // Set document ID on button
+    const modalDownloadBtn = document.getElementById('modalDownloadBtn');
+    if (modalDownloadBtn) {
+        modalDownloadBtn.setAttribute('data-document-id', document.id);
+        console.log('✅ Button ID set to:', document.id);
+    } else {
+        console.error('❌ Download button not found');
+    }
+}
+
 
         closeDocumentViewerModal() {
             if (this.documentViewerModal) {
@@ -1447,6 +1489,8 @@ if (typeof DocumentManager === 'undefined') {
             }
         }
 
+
+
         formatFileSize(bytes) {
             if (!bytes || isNaN(bytes)) return '0 B';
             const k = 1024;
@@ -1542,8 +1586,32 @@ window.deleteDocument = function(documentId) {
 };
 
 window.downloadDocument = function(documentId) {
-    if (window.ragApp && window.ragApp.managers.document) {
-        window.ragApp.managers.document.downloadDocument(documentId);
+    console.log('📥 App.js Download called with ID:', documentId);
+
+    // Get document ID from multiple sources
+    if (!documentId) {
+        const modal = document.getElementById('documentViewerModal');
+        documentId = modal ? modal.getAttribute('data-current-document-id') : null;
+        console.log('📄 Got ID from modal:', documentId);
+
+        if (!documentId) {
+            const downloadBtn = document.getElementById('modalDownloadBtn');
+            documentId = downloadBtn ? downloadBtn.getAttribute('data-document-id') : null;
+            console.log('📄 Got ID from button:', documentId);
+        }
+    }
+
+    if (!documentId) {
+        console.error('❌ No document ID found');
+        alert('No document selected');
+        return;
+    }
+
+    console.log('📥 Calling documents.js with ID:', documentId);
+
+    // Call the documents.js function
+    if (window.documentManager) {
+        window.documentManager.downloadDocument(documentId);
     }
 };
 

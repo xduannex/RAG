@@ -12,6 +12,59 @@
     <link href="css/style.css" rel="stylesheet">
     <link href="css/documents.css" rel="stylesheet">
     <link href="css/chat.css" rel="stylesheet">
+
+    <script>
+window.downloadDocument = function(documentId) {
+    console.log('📥 HTML Download called with ID:', documentId);
+
+    // Get document ID from multiple sources
+    if (!documentId) {
+        // Try getting from modal
+        const modal = document.getElementById('documentViewerModal');
+        documentId = modal ? modal.getAttribute('data-current-document-id') : null;
+        console.log('📄 Got ID from modal:', documentId);
+
+        // Try getting from download button itself
+        if (!documentId) {
+            const downloadBtn = document.getElementById('modalDownloadBtn');
+            documentId = downloadBtn ? downloadBtn.getAttribute('data-document-id') : null;
+            console.log('📄 Got ID from button:', documentId);
+        }
+
+        // Try getting from document viewer content
+        if (!documentId) {
+            const viewerContent = document.getElementById('documentViewerContent');
+            if (viewerContent) {
+                const downloadBtns = viewerContent.querySelectorAll('[data-document-id]');
+                if (downloadBtns.length > 0) {
+                    documentId = downloadBtns[0].getAttribute('data-document-id');
+                    console.log('📄 Got ID from viewer content:', documentId);
+                }
+            }
+        }
+    }
+
+    if (!documentId || documentId === 'undefined') {
+        console.error('❌ No valid document ID found');
+        alert('No document selected for download');
+        return;
+    }
+
+    console.log('📥 Final document ID:', documentId);
+
+    // Call the main download function from documents.js
+    if (window.documentManager && typeof window.documentManager.downloadDocument === 'function') {
+        console.log('📂 Calling documentManager.downloadDocument');
+        window.documentManager.downloadDocument(documentId);
+    } else if (window.ragApp && window.ragApp.managers && window.ragApp.managers.documentManager) {
+        console.log('📂 Calling ragApp documentManager');
+        window.ragApp.managers.documentManager.downloadDocument(documentId);
+    } else {
+        console.error('❌ No document manager found');
+        alert('Download service not available');
+    }
+};
+</script>
 </head>
 <body>
     <!-- Header -->
@@ -239,9 +292,9 @@
         <div class="modal-header">
             <h3 id="documentViewerTitle">Document Viewer</h3>
             <div class="modal-actions">
-                <button class="btn btn-sm btn-outline" id="downloadDocumentBtn" title="Download">
-                    <i class="fas fa-download"></i>
-                </button>
+                <button class="btn btn-sm btn-outline" id="modalDownloadBtn" onclick="window.downloadDocument()" title="Download">
+    <i class="fas fa-download"></i>
+</button>
                 <button class="btn btn-sm btn-outline" id="viewChunksBtn" title="View Chunks">
                     <i class="fas fa-list"></i>
                 </button>
