@@ -1097,73 +1097,7 @@ async def batch_process_documents(
         "scheduled_processing": scheduled_count
     }
 
-@router.delete("/batch/delete")
-async def batch_delete_documents(
-        document_ids: List[int],
-        db: Session = Depends(get_db)
-):
-    """Delete multiple documents"""
 
-    if len(document_ids) > 50:  # Limit batch deletion
-        raise HTTPException(status_code=400, detail="Too many documents. Maximum 50 documents per batch.")
-
-    results = []
-
-    for doc_id in document_ids:
-        try:
-            document = db.query(Document).filter(Document.id == doc_id).first()
-
-            if not document:
-                results.append({
-                    "document_id": doc_id,
-                    "status": "failed",
-                    "error": "Document not found"
-                })
-                continue
-
-            # Delete from vector store
-            try:
-                await chroma_service.delete_documents(doc_id)
-            except Exception as e:
-                logger.warning(f"Error deleting from vector store: {e}")
-
-            # Delete chunks
-            db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).delete()
-
-            # Delete file
-            if document.file_path and os.path.exists(document.file_path):
-                try:
-                    os.remove(document.file_path)
-                except Exception as e:
-                    logger.warning(f"Could not delete file {document.file_path}: {e}")
-
-            # Delete document record
-            filename = document.original_filename
-            db.delete(document)
-            db.commit()
-
-            results.append({
-                "document_id": doc_id,
-                "filename": filename,
-                "status": "deleted"
-            })
-
-        except Exception as e:
-            logger.error(f"Error deleting document {doc_id}: {e}")
-            results.append({
-                "document_id": doc_id,
-                "status": "failed",
-                "error": str(e)
-            })
-
-    deleted_count = len([r for r in results if r["status"] == "deleted"])
-
-    return {
-        "message": f"Batch deletion completed: {deleted_count}/{len(document_ids)} documents deleted",
-        "results": results,
-        "total_documents": len(document_ids),
-        "deleted_documents": deleted_count
-    }
 
 # Health check endpoint for documents service
 @router.get("/health")

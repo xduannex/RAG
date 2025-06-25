@@ -3,7 +3,7 @@
 
 class RAGClient {
     constructor(baseURL = null) {
-        this.baseURL = baseURL || window.API_BASE_URL || 'http://localhost:8000';
+    this.baseURL = baseURL || window.API_BASE_URL;
         this.timeout = 60000; // 60 seconds default
         this.retryAttempts = 3;
         this.retryDelay = 1000;

@@ -427,56 +427,6 @@ async def debug_chroma_keywords(keywords: List[str] = ["dennis", "document", "pd
     return await chroma_service.search_by_content_keywords(keywords)
 
 # Add database reset endpoint for development
-@app.post("/admin/reset-database")
-async def reset_database():
-    """Reset database - USE WITH CAUTION"""
-    try:
-        logger.warning("Resetting database...")
-
-        # Drop and recreate all tables
-        Base.metadata.drop_all(bind=engine)
-        Base.metadata.create_all(bind=engine)
-
-        # Re-initialize
-        init_success = init_db()
-
-        if init_success:
-            return {"message": "Database reset successfully", "status": "success"}
-        else:
-            raise HTTPException(status_code=500, detail="Database reset failed")
-
-    except Exception as e:
-        logger.error(f"Database reset error: {e}")
-        raise HTTPException(status_code=500, detail=f"Database reset failed: {str(e)}")
-
-
-# Add ChromaDB reset endpoint
-@app.post("/admin/reset-chromadb")
-async def reset_chromadb():
-    """Reset ChromaDB collections - USE WITH CAUTION"""
-    try:
-        global chroma_service
-
-        if not chroma_service:
-            raise HTTPException(status_code=500, detail="ChromaDB service not initialized")
-
-        logger.warning("Resetting ChromaDB...")
-
-        # Reset ChromaDB collections
-        if hasattr(chroma_service, 'reset_collection'):
-            result = chroma_service.reset_collection()
-            if not result:
-                raise HTTPException(status_code=500, detail="ChromaDB reset failed")
-        else:
-            # Reinitialize ChromaDB service
-            chroma_service = ChromaService()
-            await chroma_service.initialize()
-
-        return {"message": "ChromaDB reset successfully", "status": "success"}
-
-    except Exception as e:
-        logger.error(f"ChromaDB reset error: {e}")
-        raise HTTPException(status_code=500, detail=f"ChromaDB reset failed: {str(e)}")
 
 
 # Service status endpoint

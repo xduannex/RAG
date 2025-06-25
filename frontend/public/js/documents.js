@@ -193,7 +193,7 @@ class DocumentManager {
 
         try {
             // Use the correct list endpoint - match your backend
-            const response = await fetch(`${this.apiBaseUrl}/pdf/`, {
+            const response = await fetch(`${this.apiBaseUrl}/api/pdfs/`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',

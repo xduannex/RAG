@@ -1,8 +1,46 @@
 // RAG Chat Application - Configuration
+
+// Dynamic base URL configuration - SINGLE SOURCE OF TRUTH
+function getBaseUrl() {
+    const currentHost = window.location.hostname;
+    const currentProtocol = window.location.protocol;
+
+    // Check for URL parameter override
+    const envApiUrl = window.location.search.includes('api_url=')
+        ? new URLSearchParams(window.location.search).get('api_url')
+        : null;
+
+    if (envApiUrl) {
+        return envApiUrl;
+    }
+
+    // Check if we're on localhost/127.0.0.1 (true development)
+    const isLocalhost = currentHost === 'localhost' || currentHost === '127.0.0.1';
+
+    // Check if we're on a local network IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    const isLocalNetwork = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(currentHost);
+
+    // For localhost, use localhost for API
+    if (isLocalhost) {
+        return 'http://localhost:8000';
+    }
+
+    // For local network IPs, use same IP with API port
+    if (isLocalNetwork) {
+        return `${currentProtocol}//${currentHost}:8000`;
+    }
+
+    // For production, use same host with API port
+    return `${currentProtocol}//${currentHost}:8000`;
+}
+
+// Initialize base URL immediately - UNIFIED SOURCE
+window.API_BASE_URL = getBaseUrl();
+
 window.APP_CONFIG = {
     // API Configuration
     api: {
-        baseUrl: 'http://localhost:8000',
+        baseUrl: window.API_BASE_URL, // Reference the unified global
         timeout: 30000, // 30 seconds
         retryAttempts: 3,
         retryDelay: 1000 // 1 second
@@ -81,7 +119,7 @@ window.APP_CONFIG = {
         autoRefreshInterval: 60000 // 1 minute
     },
 
-    // API Endpoints
+    // API Endpoints (relative paths only)
     endpoints: {
         // Document endpoints
         uploadDocument: '/pdf/upload',
@@ -123,7 +161,12 @@ window.APP_CONFIG = {
     }
 };
 
-// Set global API base URL
-window.API_BASE_URL = window.APP_CONFIG.api.baseUrl;
+// Utility function to get full API URL - USE THIS IN ALL OTHER FILES
+window.getApiUrl = function(endpoint) {
+    return window.API_BASE_URL + endpoint;
+};
 
-console.log('Configuration loaded');
+console.log('🔧 Configuration loaded');
+console.log('🌐 API Base URL:', window.API_BASE_URL);
+console.log('🏠 Current hostname:', window.location.hostname);
+console.log('🔗 Full location:', window.location.href);
