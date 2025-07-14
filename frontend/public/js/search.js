@@ -62,12 +62,12 @@ class SearchManager {
 
             async search(query, options = {}) {
                 try {
-                    const response = await fetch(`${baseURL}/search/`, {
+                    const response = await fetch(`${baseURL}/search/search`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             query: query,
-                            limit: options.limit || 10,
+                            n_results: options.n_results || 10,
                             similarity_threshold: options.similarity_threshold || 0.7
                         })
                     });
@@ -115,11 +115,27 @@ class SearchManager {
     }
 
     setupElements() {
-        // Search input elements
-        this.messageInput = document.getElementById('messageInput');
+        // Search input elements - now using panel-aware getters
+        Object.defineProperty(this, 'messageInput', {
+            get: function() {
+                return window.getCurrentInput ? window.getCurrentInput() : document.getElementById('messageInput');
+            }
+        });
+
+        Object.defineProperty(this, 'chatContainer', {
+            get: function() {
+                return window.getCurrentContainer ? window.getCurrentContainer() : document.getElementById('chatContainer');
+            }
+        });
+
         this.sendButton = document.getElementById('sendButton');
         this.chatForm = document.getElementById('chatForm');
-        this.chatContainer = document.getElementById('chatContainer');
+
+        // Panel-specific elements
+        this.ragMessageInput = document.getElementById('ragMessageInput');
+        this.searchMessageInput = document.getElementById('searchMessageInput');
+        this.ragChatContainer = document.getElementById('ragChatContainer');
+        this.searchChatContainer = document.getElementById('searchChatContainer');
 
         // Search mode elements
         this.searchModeButtons = document.querySelectorAll('.search-mode-btn');
@@ -145,8 +161,10 @@ class SearchManager {
             container.className = 'search-suggestions';
             container.style.display = 'none';
 
-            if (this.messageInput) {
-                this.messageInput.parentNode.appendChild(container);
+            // Append to current input's parent
+            const currentInput = this.getCurrentActiveInput();
+            if (currentInput) {
+                currentInput.parentNode.appendChild(container);
             }
         }
         return container;
@@ -181,8 +199,16 @@ class SearchManager {
         return container;
     }
 
+    getCurrentActiveInput() {
+        return window.getCurrentInput ? window.getCurrentInput() : document.getElementById('messageInput');
+    }
+
+    getCurrentActiveContainer() {
+        return window.getCurrentContainer ? window.getCurrentContainer() : document.getElementById('chatContainer');
+    }
+
     setupEventListeners() {
-        // Search form submission
+        // Search form submission - handle both legacy and panel forms
         if (this.chatForm) {
             this.chatForm.addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -190,25 +216,25 @@ class SearchManager {
             });
         }
 
-        // Search input events
-        if (this.messageInput) {
-            this.messageInput.addEventListener('input', this.debounce(() => {
-                this.handleInputChange();
-            }, 300));
-
-            this.messageInput.addEventListener('keydown', (e) => {
-                this.handleKeyDown(e);
-            });
-
-            this.messageInput.addEventListener('focus', () => {
-                this.showSuggestions();
-            });
-
-            this.messageInput.addEventListener('blur', () => {
-                // Delay hiding suggestions to allow for clicks
-                setTimeout(() => this.hideSuggestions(), 150);
+        // Panel-specific form handlers
+        const ragForm = document.getElementById('ragChatForm');
+        if (ragForm) {
+            ragForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleSearch();
             });
         }
+
+        const searchForm = document.getElementById('searchChatForm');
+        if (searchForm) {
+            searchForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleSearch();
+            });
+        }
+
+        // Search input events - handle all inputs
+        this.setupInputEventListeners();
 
         // Search mode buttons
         this.searchModeButtons.forEach(btn => {
@@ -261,8 +287,36 @@ class SearchManager {
         }
     }
 
+    setupInputEventListeners() {
+        const inputs = [
+            this.messageInput,
+            this.ragMessageInput,
+            this.searchMessageInput
+        ].filter(input => input);
+
+        inputs.forEach(input => {
+            input.addEventListener('input', this.debounce(() => {
+                this.handleInputChange(input);
+            }, 300));
+
+            input.addEventListener('keydown', (e) => {
+                this.handleKeyDown(e);
+            });
+
+            input.addEventListener('focus', () => {
+                this.showSuggestions();
+            });
+
+            input.addEventListener('blur', () => {
+                // Delay hiding suggestions to allow for clicks
+                setTimeout(() => this.hideSuggestions(), 150);
+            });
+        });
+    }
+
     async handleSearch() {
-        const query = this.messageInput?.value?.trim();
+        const currentInput = this.getCurrentActiveInput();
+        const query = currentInput?.value?.trim();
 
         if (!query) {
             return;
@@ -281,8 +335,8 @@ class SearchManager {
             this.addToSearchHistory(query, this.searchMode);
 
             // Clear input
-            if (this.messageInput) {
-                this.messageInput.value = '';
+            if (currentInput) {
+                currentInput.value = '';
             }
 
             // Hide suggestions
@@ -363,7 +417,7 @@ class SearchManager {
 
     async performSearch(query) {
         const options = {
-            limit: this.getMaxResults(),
+            n_results: this.getMaxResults(),
             similarity_threshold: 0.7,
             ...this.getSearchFilters()
         };
@@ -407,7 +461,23 @@ class SearchManager {
     }
 
     displaySearchResults(query, result) {
-        if (!this.chatContainer) return;
+        // Use ChatManager to display results if available
+        if (window.chatManager) {
+            if (result.success) {
+                if (this.searchMode === 'rag') {
+                    window.chatManager.handleRAGResponse(result.data || result);
+                } else {
+                    window.chatManager.handleSearchResponse(result.data || result);
+                }
+            } else {
+                window.chatManager.addMessage('error', result.error || 'Search failed');
+            }
+            return;
+        }
+
+        // Fallback to manual display
+        const currentContainer = this.getCurrentActiveContainer();
+        if (!currentContainer) return;
 
         // Create message container
         const messageContainer = document.createElement('div');
@@ -420,8 +490,8 @@ class SearchManager {
         // Add assistant response
         if (result.success) {
             const assistantMessage = this.searchMode === 'rag' ?
-                this.createRAGResponse(result.data) :
-                this.createSearchResponse(result.data);
+                this.createRAGResponse(result.data || result) :
+                this.createSearchResponse(result.data || result);
             messageContainer.appendChild(assistantMessage);
         } else {
             const errorMessage = this.createErrorMessage(result.error);
@@ -429,7 +499,7 @@ class SearchManager {
         }
 
         // Add to chat container
-        this.chatContainer.appendChild(messageContainer);
+        currentContainer.appendChild(messageContainer);
 
         // Scroll to bottom
         this.scrollToBottom();
@@ -437,17 +507,19 @@ class SearchManager {
 
     createUserMessage(query) {
         const userMessage = document.createElement('div');
-        userMessage.className = 'message user-message';
+        userMessage.className = 'chat-message user-message';
         userMessage.innerHTML = `
             <div class="message-content">
-                <div class="message-text">${this.escapeHtml(query)}</div>
-                <div class="message-meta">
-                    <span class="message-mode">${this.searchMode.toUpperCase()}</span>
-                    <span class="message-time">${this.formatTime(new Date())}</span>
+                <div class="message-avatar user-avatar">
+                    <i class="fas fa-user"></i>
                 </div>
-            </div>
-            <div class="message-avatar">
-                <i class="fas fa-user"></i>
+                <div class="message-bubble user-bubble">
+                    <div class="message-text">${this.escapeHtml(query)}</div>
+                    <div class="message-meta">
+                        <span class="message-mode">${this.searchMode.toUpperCase()}</span>
+                        <span class="message-time">${this.formatTime(new Date())}</span>
+                    </div>
+                </div>
             </div>
         `;
         return userMessage;
@@ -455,56 +527,58 @@ class SearchManager {
 
     createRAGResponse(data) {
         const response = this.ragClient.formatRAGResponse ?
-        this.ragClient.formatRAGResponse(data) : data;
+            this.ragClient.formatRAGResponse(data) : data;
 
-    const assistantMessage = document.createElement('div');
-    assistantMessage.className = 'message assistant-message';
+        const assistantMessage = document.createElement('div');
+        assistantMessage.className = 'chat-message assistant-message';
 
-    let sourcesHTML = '';
-    if (response.sources && response.sources.length > 0) {
-        sourcesHTML = `
-            <div class="message-sources">
-                <h4><i class="fas fa-book"></i> Sources:</h4>
-                <div class="sources-grid">
-                    ${response.sources.map((source, index) => {
-                        // Fix relevance percentage calculation
-                        const score = source.score || source.similarity_score || 0;
-                        const relevancePercentage = Math.round(score * 100);
-                        const displayPercentage = isNaN(relevancePercentage) ? 0 : relevancePercentage;
-                        
-                        return `
-                            <div class="source-item" onclick="window.openDocumentViewer(${source.source.document_id})">
-                                <div class="source-header">
-                                    <span class="source-number">${index + 1}</span>
-                                    <span class="source-title">${this.escapeHtml(source.source.filename)}</span>
-                                    <span class="source-score">${displayPercentage}%</span>
+        let sourcesHTML = '';
+        if (response.sources && response.sources.length > 0) {
+            sourcesHTML = `
+                <div class="message-sources">
+                    <h4><i class="fas fa-book"></i> Sources:</h4>
+                    <div class="sources-grid">
+                        ${response.sources.map((source, index) => {
+                            // Fix relevance percentage calculation
+                            const score = source.score || source.similarity_score || 0;
+                            const relevancePercentage = Math.round(score * 100);
+                            const displayPercentage = isNaN(relevancePercentage) ? 0 : relevancePercentage;
+                            
+                            return `
+                                <div class="source-item" onclick="window.documentManager?.openDocumentViewer(${source.source?.document_id || source.document_id})">
+                                    <div class="source-header">
+                                        <span class="source-number">${index + 1}</span>
+                                        <span class="source-title">${this.escapeHtml(source.source?.filename || source.filename || 'Unknown')}</span>
+                                        <span class="source-score">${displayPercentage}%</span>
+                                    </div>
+                                    <div class="source-preview">${this.escapeHtml(source.preview || source.content || '')}</div>
+                                    <div class="source-meta">
+                                        ${source.source?.page || source.page_number ? `Page ${source.source.page || source.page_number}` : ''}
+                                        ${source.source?.chunk_index || source.chunk_index ? `• Chunk ${source.source.chunk_index || source.chunk_index}` : ''}
+                                    </div>
                                 </div>
-                                <div class="source-preview">${this.escapeHtml(source.preview)}</div>
-                                <div class="source-meta">
-                                    ${source.source.page ? `Page ${source.source.page}` : ''}
-                                    ${source.source.chunk_index ? `• Chunk ${source.source.chunk_index}` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
+                            `;
+                        }).join('')}
+                    </div>
                 </div>
-            </div>
             `;
         }
 
         assistantMessage.innerHTML = `
-            <div class="message-avatar">
-                <i class="fas fa-robot"></i>
-            </div>
             <div class="message-content">
-                <div class="message-text">${this.escapeHtml(response.answer || data.answer || 'No response generated')}</div>
-                ${sourcesHTML}
-                <div class="message-meta">
-                    <span class="message-time">${this.formatTime(new Date())}</span>
-                    <span class="message-stats">
-                        ${response.sources ? response.sources.length : 0} sources • 
-                        ${response.metadata ? Math.round(response.metadata.responseTime * 1000) : 0}ms
-                    </span>
+                <div class="message-avatar assistant-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-bubble assistant-bubble">
+                    <div class="message-text">${this.escapeHtml(response.answer || data.answer || 'No response generated')}</div>
+                    ${sourcesHTML}
+                    <div class="message-meta">
+                        <span class="message-time">${this.formatTime(new Date())}</span>
+                        <span class="message-stats">
+                            ${response.sources ? response.sources.length : 0} sources • 
+                            ${response.metadata ? Math.round(response.metadata.responseTime * 1000) : 0}ms
+                        </span>
+                    </div>
                 </div>
             </div>
         `;
@@ -513,38 +587,38 @@ class SearchManager {
     }
 
     createSearchResponse(data) {
-    const assistantMessage = document.createElement('div');
-    assistantMessage.className = 'message assistant-message';
+        const assistantMessage = document.createElement('div');
+        assistantMessage.className = 'chat-message assistant-message';
 
-    let resultsHTML = '';
-    if (data.results && data.results.length > 0) {
-        resultsHTML = `
-            <div class="search-results">
-                <h4><i class="fas fa-search"></i> Search Results (${data.results.length}):</h4>
-                <div class="results-list">
-                    ${data.results.map((result, index) => {
-                        // Fix similarity score calculation
-                        const score = result.similarity_score || 0;
-                        const relevancePercentage = Math.round(score * 100);
-                        const displayPercentage = isNaN(relevancePercentage) ? 0 : relevancePercentage;
-                        
-                        return `
-                            <div class="result-item" onclick="window.openDocumentViewer(${result.document_id})">
-                                <div class="result-header">
-                                    <span class="result-number">${index + 1}</span>
-                                    <span class="result-title">${this.escapeHtml(result.filename || result.title || 'Untitled')}</span>
-                                    <span class="result-score">${displayPercentage}%</span>
+        let resultsHTML = '';
+        if (data.results && data.results.length > 0) {
+            resultsHTML = `
+                <div class="search-results">
+                    <h4><i class="fas fa-search"></i> Search Results (${data.results.length}):</h4>
+                    <div class="results-list">
+                        ${data.results.map((result, index) => {
+                            // Fix similarity score calculation
+                            const score = result.similarity_score || 0;
+                            const relevancePercentage = Math.round(score * 100);
+                            const displayPercentage = isNaN(relevancePercentage) ? 0 : relevancePercentage;
+                            
+                            return `
+                                <div class="result-item" onclick="window.documentManager?.openDocumentViewer(${result.document_id})">
+                                    <div class="result-header">
+                                        <span class="result-number">${index + 1}</span>
+                                        <span class="result-title">${this.escapeHtml(result.filename || result.title || 'Untitled')}</span>
+                                        <span class="result-score">${displayPercentage}%</span>
+                                    </div>
+                                    <div class="result-content">${this.escapeHtml(result.content.substring(0, 200))}...</div>
+                                    <div class="result-meta">
+                                        ${result.page_number ? `Page ${result.page_number}` : ''}
+                                        ${result.chunk_index ? `• Chunk ${result.chunk_index}` : ''}
+                                    </div>
                                 </div>
-                                <div class="result-content">${this.escapeHtml(result.content.substring(0, 200))}...</div>
-                                <div class="result-meta">
-                                    ${result.page_number ? `Page ${result.page_number}` : ''}
-                                    ${result.chunk_index ? `• Chunk ${result.chunk_index}` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
+                            `;
+                        }).join('')}
+                    </div>
                 </div>
-            </div>
             `;
         } else {
             resultsHTML = `
@@ -556,17 +630,19 @@ class SearchManager {
         }
 
         assistantMessage.innerHTML = `
-            <div class="message-avatar">
-                <i class="fas fa-search"></i>
-            </div>
             <div class="message-content">
-                ${resultsHTML}
-                <div class="message-meta">
-                    <span class="message-time">${this.formatTime(new Date())}</span>
-                    <span class="message-stats">
-                        ${data.total_results || 0} total results • 
-                        ${Math.round((data.response_time || 0) * 1000)}ms
-                    </span>
+                <div class="message-avatar search-avatar">
+                    <i class="fas fa-search"></i>
+                </div>
+                                <div class="message-bubble search-bubble">
+                    ${resultsHTML}
+                    <div class="message-meta">
+                        <span class="message-time">${this.formatTime(new Date())}</span>
+                        <span class="message-stats">
+                            ${data.total_results || 0} total results • 
+                            ${Math.round((data.response_time || 0) * 1000)}ms
+                        </span>
+                    </div>
                 </div>
             </div>
         `;
@@ -576,29 +652,28 @@ class SearchManager {
 
     createErrorMessage(error) {
         const errorMessage = document.createElement('div');
-        errorMessage.className = 'message assistant-message error-message';
+        errorMessage.className = 'chat-message assistant-message error-message';
         errorMessage.innerHTML = `
-            <div class="message-avatar error">
-                <i class="fas fa-exclamation-triangle"></i>
-            </div>
             <div class="message-content">
-                <div class="message-text error-text">
-                    <strong>Search Error</strong><br>
-                    ${this.escapeHtml(error)}
-                    <div class="error-actions">
-                        <button class="btn btn-sm btn-outline" onclick="this.closest('.message-container').remove()">
-                            <i class="fas fa-times"></i> Dismiss
-                        </button>
-                        <button class="btn btn-sm btn-primary" onclick="window.ragApp.refreshStats()">
-                            <i class="fas fa-sync"></i> Retry Search
-                        </button>
-                        <button class="btn btn-sm btn-secondary" onclick="window.checkConnection()">
-                            <i class="fas fa-wifi"></i> Check Connection
-                        </button>
-                    </div>
+                <div class="message-avatar error-avatar">
+                    <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <div class="message-meta">
-                    <span class="message-time">${this.formatTime(new Date())}</span>
+                <div class="message-bubble error-bubble">
+                    <div class="message-text error-text">
+                        <strong>Search Error</strong><br>
+                        ${this.escapeHtml(error)}
+                        <div class="error-actions">
+                            <button class="btn btn-sm btn-outline" onclick="this.closest('.message-container').remove()">
+                                <i class="fas fa-times"></i> Dismiss
+                            </button>
+                            <button class="btn btn-sm btn-primary" onclick="window.searchManager.handleSearch()">
+                                <i class="fas fa-sync"></i> Retry Search
+                            </button>
+                        </div>
+                    </div>
+                    <div class="message-meta">
+                        <span class="message-time">${this.formatTime(new Date())}</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -613,8 +688,8 @@ class SearchManager {
         });
     }
 
-    handleInputChange() {
-        const query = this.messageInput?.value?.trim();
+    handleInputChange(input) {
+        const query = input?.value?.trim();
 
         if (!query) {
             this.hideSuggestions();
@@ -757,10 +832,13 @@ class SearchManager {
     selectSuggestion(index) {
         if (index >= 0 && index < this.suggestions.length) {
             const suggestion = this.suggestions[index];
-            if (this.messageInput) {
-                this.messageInput.value = suggestion.text;
-                this.messageInput.focus();
+            const currentInput = this.getCurrentActiveInput();
+
+            if (currentInput) {
+                currentInput.value = suggestion.text;
+                currentInput.focus();
             }
+
             this.setSearchMode(suggestion.mode);
             this.hideSuggestions();
         }
@@ -780,14 +858,39 @@ class SearchManager {
             btn.classList.toggle('active', btn.dataset.mode === mode);
         });
 
-        // Update placeholder
-        if (this.messageInput) {
-            this.messageInput.placeholder = mode === 'rag' ?
-                'Ask a question about your documents...' :
-                'Search for specific content...';
+        // Update placeholders for all inputs
+        this.updatePlaceholders(mode);
+
+        // Update current panel if using panel system
+        if (window.switchChatPanel) {
+            window.switchChatPanel(mode);
         }
 
         console.log(`Search mode set to: ${mode}`);
+    }
+
+    updatePlaceholders(mode) {
+        const ragPlaceholder = 'Ask a question about your documents...';
+        const searchPlaceholder = 'Search for specific content...';
+
+        // Update all input placeholders
+        const inputs = [
+            { element: this.messageInput, mode: 'legacy' },
+            { element: this.ragMessageInput, mode: 'rag' },
+            { element: this.searchMessageInput, mode: 'search' }
+        ];
+
+        inputs.forEach(({ element, mode: inputMode }) => {
+            if (element) {
+                if (inputMode === 'legacy') {
+                    element.placeholder = mode === 'rag' ? ragPlaceholder : searchPlaceholder;
+                } else if (inputMode === 'rag') {
+                    element.placeholder = ragPlaceholder;
+                } else if (inputMode === 'search') {
+                    element.placeholder = searchPlaceholder;
+                }
+            }
+        });
     }
 
     loadSearchMode() {
@@ -796,43 +899,52 @@ class SearchManager {
     }
 
     updateSearchButton(isSearching) {
-        if (!this.sendButton) return;
+        const sendButtons = [
+            this.sendButton,
+            document.getElementById('ragSendButton'),
+            document.getElementById('searchSendButton')
+        ].filter(btn => btn);
 
-        const icon = this.sendButton.querySelector('i');
-        if (isSearching) {
-            this.sendButton.disabled = true;
-            if (icon) {
-                icon.className = 'fas fa-spinner fa-spin';
+        sendButtons.forEach(button => {
+            const icon = button.querySelector('i');
+            if (isSearching) {
+                button.disabled = true;
+                if (icon) {
+                    icon.className = 'fas fa-spinner fa-spin';
+                }
+            } else {
+                button.disabled = false;
+                if (icon) {
+                    icon.className = 'fas fa-paper-plane';
+                }
             }
-        } else {
-            this.sendButton.disabled = false;
-            if (icon) {
-                icon.className = 'fas fa-paper-plane';
-            }
-        }
+        });
     }
 
     showTypingIndicator() {
-        if (!this.chatContainer) return;
+        const currentContainer = this.getCurrentActiveContainer();
+        if (!currentContainer) return;
 
         const indicator = document.createElement('div');
         indicator.id = 'typingIndicator';
-        indicator.className = 'message assistant-message typing-indicator';
+        indicator.className = 'chat-message assistant-message typing-indicator';
         indicator.innerHTML = `
-            <div class="message-avatar">
-                <i class="fas fa-robot"></i>
-            </div>
             <div class="message-content">
-                <div class="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
+                <div class="message-avatar assistant-avatar">
+                    <i class="fas fa-robot"></i>
                 </div>
-                <div class="typing-text">Searching...</div>
+                <div class="message-bubble assistant-bubble">
+                    <div class="typing-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    <div class="typing-text">Searching...</div>
+                </div>
             </div>
         `;
 
-        this.chatContainer.appendChild(indicator);
+        currentContainer.appendChild(indicator);
         this.scrollToBottom();
     }
 
@@ -844,8 +956,9 @@ class SearchManager {
     }
 
     scrollToBottom() {
-        if (this.chatContainer) {
-            this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+        const currentContainer = this.getCurrentActiveContainer();
+        if (currentContainer) {
+            currentContainer.scrollTop = currentContainer.scrollHeight;
         }
     }
 
@@ -914,6 +1027,7 @@ class SearchManager {
             content.innerHTML = `
                 <div class="no-history">
                     <i class="fas fa-history"></i>
+                    <p>No search history available</p>
                 </div>
             `;
         } else {
@@ -952,10 +1066,12 @@ class SearchManager {
     }
 
     selectHistoryItem(query, mode) {
-        if (this.messageInput) {
-            this.messageInput.value = query;
-            this.messageInput.focus();
+        const currentInput = this.getCurrentActiveInput();
+        if (currentInput) {
+            currentInput.value = query;
+            currentInput.focus();
         }
+
         this.setSearchMode(mode);
         this.hideSearchHistory();
     }
@@ -979,7 +1095,7 @@ class SearchManager {
 
     getFromCache(key) {
         const cached = this.searchCache.get(key);
-        if (!cached) return null;
+        if (!        cached) return null;
 
         // Check if cache is still valid
         if (Date.now() - cached.timestamp > this.cacheTimeout) {
@@ -1202,8 +1318,9 @@ class SearchManager {
 
     // Public API methods
     performQuery(query, mode = null) {
-        if (this.messageInput) {
-            this.messageInput.value = query;
+        const currentInput = this.getCurrentActiveInput();
+        if (currentInput) {
+            currentInput.value = query;
         }
 
         if (mode) {
@@ -1243,13 +1360,6 @@ class SearchManager {
             this.chatForm.removeEventListener('submit', this.handleSearch);
         }
 
-        if (this.messageInput) {
-            this.messageInput.removeEventListener('input', this.handleInputChange);
-            this.messageInput.removeEventListener('keydown', this.handleKeyDown);
-            this.messageInput.removeEventListener('focus', this.showSuggestions);
-            this.messageInput.removeEventListener('blur', this.hideSuggestions);
-        }
-
         // Clean up DOM elements
         if (this.suggestionsContainer && this.suggestionsContainer.parentElement) {
             this.suggestionsContainer.remove();
@@ -1264,9 +1374,132 @@ class SearchManager {
 // Global functions for HTML onclick handlers
 window.searchManager = null;
 
+// Global search history functions for panel compatibility
+window.showSearchHistory = function(panelType) {
+    if (window.searchManager) {
+        window.searchManager.showSearchHistory();
+    }
+};
+
+// Override setSearchMode to work with new panels
+const originalSetSearchMode = window.setSearchMode;
+
+window.setSearchMode = function(mode) {
+    console.log('Setting search mode to:', mode);
+
+    // Ensure mode is valid
+    if (mode !== 'rag' && mode !== 'search') {
+        console.warn('Invalid search mode:', mode);
+        return;
+    }
+
+    // Set the mode in various places to ensure consistency
+    window.currentSearchMode = mode;
+
+    // Update ChatManager if it exists
+    if (window.chatManager) {
+        window.chatManager.currentSearchMode = mode;
+    }
+
+    // Update SearchManager if it exists
+    if (window.searchManager) {
+        window.searchManager.searchMode = mode;
+    }
+
+    // Update panel state
+    if (window.currentChatPanel) {
+        window.currentChatPanel = mode === 'rag' ? 'rag' : 'search';
+    }
+
+    // Update UI
+    updateSearchModeUI(mode);
+
+    // Store in localStorage
+    localStorage.setItem('rag_search_mode', mode);
+
+    console.log('Search mode set successfully:', mode);
+};
+
+function updateSearchModeUI(mode) {
+    // Update search mode buttons
+    document.querySelectorAll('.search-mode-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.mode === mode) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Update input placeholders
+    const ragInput = document.getElementById('ragMessageInput');
+    const searchInput = document.getElementById('searchMessageInput');
+    const legacyInput = document.getElementById('messageInput');
+
+    if (mode === 'rag') {
+        if (ragInput) ragInput.placeholder = 'Ask a question about your documents...';
+        if (legacyInput) legacyInput.placeholder = 'Ask a question about your documents...';
+    } else {
+        if (searchInput) searchInput.placeholder = 'Search for specific content...';
+        if (legacyInput) legacyInput.placeholder = 'Search for specific content...';
+    }
+}
+
+function updateSearchUI(mode) {
+    // Update placeholders and UI elements based on mode
+    const ragInput = document.getElementById('ragMessageInput');
+    const searchInput = document.getElementById('searchMessageInput');
+    const messageInput = document.getElementById('messageInput');
+
+    if (ragInput && mode === 'rag') {
+        ragInput.placeholder = 'Ask a question about your documents...';
+    }
+
+    if (searchInput && mode === 'search') {
+        searchInput.placeholder = 'Search for specific content...';
+    }
+
+    if (messageInput) {
+        messageInput.placeholder = mode === 'rag' ?
+            'Ask a question about your documents...' :
+            'Search for specific content...';
+    }
+}
+
+// Initialize SearchManager when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        console.log('Initializing SearchManager...');
+
+        if (window.ragClient) {
+            window.searchManager = new SearchManager(window.ragClient);
+            window.searchManager.initialize().then(() => {
+                console.log('SearchManager initialized successfully');
+
+                // Set default search mode
+                window.setSearchMode('rag');
+            }).catch(error => {
+                console.error('Failed to initialize SearchManager:', error);
+            });
+        } else {
+            console.warn('RAGClient not found, retrying SearchManager initialization...');
+            setTimeout(() => {
+                if (window.ragClient) {
+                    window.searchManager = new SearchManager(window.ragClient);
+                    window.searchManager.initialize().then(() => {
+                        console.log('SearchManager initialized successfully (retry)');
+                        window.setSearchMode('rag');
+                    }).catch(error => {
+                        console.error('Failed to initialize SearchManager (retry):', error);
+                    });
+                } else {
+                    console.error('Failed to initialize SearchManager: RAGClient not found');
+                }
+            }, 1000);
+        }
+    }, 700);
+});
+
 // Export for module systems
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = SearchManager;
 }
 
-console.log('SearchManager class loaded');

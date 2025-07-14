@@ -3,7 +3,7 @@
 
 class RAGClient {
     constructor(baseURL = null) {
-    this.baseURL = baseURL || window.API_BASE_URL;
+        this.baseURL = baseURL || window.API_BASE_URL || 'http://localhost:8000';
         this.timeout = 60000; // 60 seconds default
         this.retryAttempts = 3;
         this.retryDelay = 1000;
@@ -85,6 +85,84 @@ class RAGClient {
         }
 
         throw lastError;
+    }
+
+    // Add the missing post method
+    async post(endpoint, data = null, options = {}) {
+        const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    ...options.headers
+                },
+                body: data ? JSON.stringify(data) : null,
+                ...options
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                let errorMessage;
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.detail || errorJson.message || errorText;
+                } catch {
+                    errorMessage = errorText || `HTTP ${response.status}`;
+                }
+                throw new Error(errorMessage);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return await response.json();
+            } else {
+                return await response.text();
+            }
+        } catch (error) {
+            console.error('POST request failed:', error);
+            throw error;
+        }
+    }
+
+    // Add the missing get method
+    async get(endpoint, options = {}) {
+        const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    ...options.headers
+                },
+                ...options
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                let errorMessage;
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.detail || errorJson.message || errorText;
+                } catch {
+                    errorMessage = errorText || `HTTP ${response.status}`;
+                }
+                throw new Error(errorMessage);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return await response.json();
+            } else {
+                return await response.text();
+            }
+        } catch (error) {
+            console.error('GET request failed:', error);
+            throw error;
+        }
     }
 
     // Wrapper methods that return consistent response format
@@ -202,55 +280,69 @@ class RAGClient {
         });
     }
 
-    // Search Operations
+    // Search Operations - Updated with better error handling
     async search(query, options = {}) {
-        const payload = {
-            query,
-            limit: options.limit || 10,
-            similarity_threshold: options.similarity_threshold || 0.7,
-            ...options
-        };
+        try {
+            const payload = {
+                query: query,
+                n_results: options.n_results || options.limit || 10,
+                similarity_threshold: options.similarity_threshold || 0.3,
+                ...options
+            };
 
-        return await this.request('/search/', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
+            console.log('Search payload:', payload);
+
+            const response = await this.post('/search/search', payload);
+
+            return {
+                success: true,
+                data: response
+            };
+        } catch (error) {
+            console.error('Search failed:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 
     async ragQuery(query, options = {}) {
-    try {
-        const payload = {
-            query: query, // Note: backend expects 'query', not 'question'
-            max_results: options.max_results || options.n_results || 5,
-            similarity_threshold: options.similarity_threshold || 0.7,
-            model: options.model || 'llama3.2:latest',
-            document_ids: options.document_ids || options.pdf_ids || null,
-            category: options.category || null,
-            include_context: options.include_context || false
-        };
+        try {
+            const payload = {
+                query: query,
+                max_results: options.max_results || options.n_results || 5,
+                similarity_threshold: options.similarity_threshold || 0.3,
+                model: options.model || 'qwen2.5:7b',
+                document_ids: options.document_ids || options.pdf_ids || null,
+                category: options.category || null,
+                include_context: options.include_context || false,
+                ...options
+            };
 
-        // Remove null values
-        Object.keys(payload).forEach(key => {
-            if (payload[key] === null || payload[key] === undefined) {
-                delete payload[key];
-            }
-        });
+            // Remove null values
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === null || payload[key] === undefined) {
+                    delete payload[key];
+                }
+            });
 
-        const response = await this.client.post('/rag', payload, { // Note: endpoint is '/rag', not '/search/rag'
-            timeout: 120000 // 2 minutes for RAG queries
-        });
+            console.log('RAG Query payload:', payload);
 
-        return {
-            success: true,
-            data: response.data
-        };
-    } catch (error) {
-        return {
-            success: false,
-            error: error.response?.data?.detail || error.message
-        };
+            const response = await this.post('/search/rag', payload);
+
+            return {
+                success: true,
+                data: response
+            };
+        } catch (error) {
+            console.error('RAG query failed:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
-}
 
     async semanticSearch(query, options = {}) {
         const payload = {
@@ -407,366 +499,154 @@ class RAGClient {
             errors.push('File must have a valid name');
         }
 
-        return {
+                return {
             valid: errors.length === 0,
-            errors: errors,
-            file: {
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                extension: extension,
-                sizeFormatted: this.formatFileSize(file.size)
-            }
+            errors: errors
         };
     }
 
     // Helper method to format file size
     formatFileSize(bytes) {
-        if (!bytes || isNaN(bytes)) return '0 B';
+        if (bytes === 0) return '0 Bytes';
         const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    // Helper method to format search results
-    formatSearchResults(results) {
-        if (!results || !Array.isArray(results)) {
-            return [];
-        }
-
-        return results.map(result => ({
-            ...result,
-            relevanceScore: result.score || result.similarity || 0,
-            relevancePercentage: Math.round((result.score || result.similarity || 0) * 100),
-            preview: result.content ? result.content.substring(0, 200) + '...' : '',
-            source: {
-                document_id: result.document_id || result.pdf_id,
-                filename: result.filename || result.document_name,
-                page: result.page_number || result.page,
-                chunk_index: result.chunk_index
-            }
-        }));
-    }
-
-    // Helper method to format RAG response
+    // Helper method to format response for display
     formatRAGResponse(response) {
-        if (!response) {
-            return null;
-        }
+        if (!response) return null;
 
         return {
-            answer: response.answer || response.response || '',
-            confidence: response.confidence || 0,
-            confidencePercentage: Math.round((response.confidence || 0) * 100),
-            sources: this.formatSearchResults(response.sources || []),
+            answer: response.answer || 'No answer generated',
+            sources: response.sources || [],
+            query: response.query || '',
+            model: response.model_used || 'Unknown',
             metadata: {
-                model: response.model || 'unknown',
-                tokens: response.total_tokens || 0,
                 responseTime: response.response_time || 0,
-                searchTime: response.vector_search_time || 0,
-                llmTime: response.llm_response_time || 0
-            },
-            timestamp: response.timestamp || new Date().toISOString()
+                totalSources: response.total_sources || 0,
+                parameters: response.parameters || {}
+            }
         };
     }
-    // Helper method to poll processing status
-    async pollProcessingStatus(documentId, options = {}) {
-        const maxAttempts = options.maxAttempts || 60; // 5 minutes with 5-second intervals
-        const interval = options.interval || 5000; // 5 seconds
-        const onUpdate = options.onUpdate || null;
 
-        let attempts = 0;
+    // Helper method to format search results
+    formatSearchResponse(response) {
+        if (!response) return null;
 
-        return new Promise((resolve, reject) => {
-            const poll = async () => {
-                try {
-                    attempts++;
-                    const result = await this.getDocumentStatus(documentId);
-
-                    if (!result.success) {
-                        reject(new Error(result.error));
-                        return;
-                    }
-
-                    const status = result.data.processing_status;
-
-                    // Call update callback if provided
-                    if (onUpdate) {
-                        onUpdate(result.data, attempts);
-                    }
-
-                    // Check if processing is complete
-                    if (status === 'completed') {
-                        resolve(result.data);
-                        return;
-                    }
-
-                    // Check if processing failed
-                    if (status === 'failed' || status === 'error') {
-                        reject(new Error(result.data.error_message || 'Processing failed'));
-                        return;
-                    }
-
-                    // Check if max attempts reached
-                    if (attempts >= maxAttempts) {
-                        reject(new Error('Processing timeout - maximum attempts reached'));
-                        return;
-                    }
-
-                    // Continue polling if still processing
-                    if (status === 'processing' || status === 'pending') {
-                        setTimeout(poll, interval);
-                    } else {
-                        resolve(result.data);
-                    }
-
-                } catch (error) {
-                    reject(error);
-                }
-            };
-
-            // Start polling
-            poll();
-        });
-    }
-
-    // Helper method to handle file downloads
-    async handleFileDownload(documentId, filename) {
-        try {
-            const result = await this.downloadDocument(documentId);
-
-            if (result.success) {
-                // Create blob URL and trigger download
-                const blob = result.data;
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename || `document_${documentId}`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
-
-                return { success: true };
-            } else {
-                return result;
+        return {
+            results: response.results || [],
+            total: response.total || 0,
+            query: response.query || '',
+            metadata: {
+                responseTime: response.response_time || 0,
+                parameters: response.parameters || {}
             }
-        } catch (error) {
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-
-    // Helper method to create search filters
-    createSearchFilters(options = {}) {
-        const filters = {};
-
-        if (options.categories && options.categories.length > 0) {
-            filters.categories = options.categories;
-        }
-
-        if (options.documentIds && options.documentIds.length > 0) {
-            filters.pdf_ids = options.documentIds;
-        }
-
-        if (options.dateRange) {
-            if (options.dateRange.start) {
-                filters.start_date = options.dateRange.start;
-            }
-            if (options.dateRange.end) {
-                filters.end_date = options.dateRange.end;
-            }
-        }
-
-        if (options.minScore !== undefined) {
-            filters.similarity_threshold = options.minScore;
-        }
-
-        if (options.fileTypes && options.fileTypes.length > 0) {
-            filters.file_types = options.fileTypes;
-        }
-
-        return filters;
-    }
-
-    // Helper method to get error message from response
-    getErrorMessage(error) {
-        if (typeof error === 'string') {
-            return error;
-        }
-
-        if (error.response?.data?.detail) {
-            return error.response.data.detail;
-        }
-
-        if (error.response?.data?.message) {
-            return error.response.data.message;
-        }
-
-        if (error.message) {
-            return error.message;
-        }
-
-        return 'An unknown error occurred';
-    }
-
-    // Helper method to check if service is available
-    async isServiceAvailable() {
-        try {
-            const result = await this.healthCheck();
-            return result.success && result.data?.status === 'healthy';
-        } catch (error) {
-            return false;
-        }
-    }
-
-    // Helper method to get service status
-    async getServiceStatus() {
-        try {
-            const [health, stats] = await Promise.allSettled([
-                this.healthCheck(),
-                this.getStats()
-            ]);
-
-            const healthResult = health.status === 'fulfilled' ? health.value : null;
-            const statsResult = stats.status === 'fulfilled' ? stats.value : null;
-
-            return {
-                available: healthResult?.success || false,
-                healthy: healthResult?.success && healthResult.data?.status === 'healthy',
-                database: healthResult?.data?.database || 'unknown',
-                documents: statsResult?.success ? statsResult.data : null,
-                timestamp: new Date().toISOString()
-            };
-        } catch (error) {
-            return {
-                available: false,
-                healthy: false,
-                error: this.getErrorMessage(error),
-                timestamp: new Date().toISOString()
-            };
-        }
+        };
     }
 
     // Configuration methods
+    setBaseURL(baseURL) {
+        this.baseURL = baseURL;
+        console.log('RAGClient baseURL updated to:', baseURL);
+    }
+
     setTimeout(timeout) {
         this.timeout = timeout;
     }
 
-    setRetryConfig(attempts, delay) {
+    setRetryAttempts(attempts) {
         this.retryAttempts = attempts;
+    }
+
+    setRetryDelay(delay) {
         this.retryDelay = delay;
     }
 
-    setBaseURL(baseURL) {
-        this.baseURL = baseURL;
-    }
-
-    // Method to get current configuration
-    getConfig() {
-        return {
-            baseURL: this.baseURL,
-            timeout: this.timeout,
-            retryAttempts: this.retryAttempts,
-            retryDelay: this.retryDelay
-        };
-    }
-
     // Batch operations
-    async batchRequest(requests) {
-        const promises = requests.map(async (req) => {
-            try {
-                const result = await this.request(req.url, req.options);
-                return {
-                    id: req.id,
-                    success: true,
-                    data: result.data,
-                    url: req.url
-                };
-            } catch (error) {
-                return {
-                    id: req.id,
-                    success: false,
-                    error: error.message,
-                    url: req.url
-                };
-            }
-        });
+    async batchSearch(queries, options = {}) {
+        const payload = {
+            queries: queries,
+            ...options
+        };
 
-        return await Promise.allSettled(promises);
+        return await this.request('/search/batch', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
     }
 
-    // Streaming support for RAG queries
-    async ragQueryStream(question, options = {}, onChunk = null) {
+    async batchRAGQuery(queries, options = {}) {
         const payload = {
-            question,
-            max_results: options.max_results || 5,
-            similarity_threshold: options.similarity_threshold || 0.7,
-            model: options.model || 'llama3.2:latest',
-            temperature: options.temperature || 0.7,
-            max_tokens: options.max_tokens || 1000,
-            include_sources: options.include_sources !== false,
-            stream: true,
+            queries: queries,
+            ...options
+        };
+
+        return await this.request('/search/batch-rag', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    // Document processing status
+    async getProcessingStatus() {
+        return await this.request('/processing/status');
+    }
+
+    async getProcessingQueue() {
+        return await this.request('/processing/queue');
+    }
+
+    // Cache operations
+    async clearCache(cacheType = 'all') {
+        const payload = { cache_type: cacheType };
+        return await this.request('/admin/clear-cache', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getCacheStats() {
+        return await this.request('/admin/cache-stats');
+    }
+
+    // Model management
+    async getAvailableModels() {
+        return await this.request('/models/available');
+    }
+
+    async getCurrentModel() {
+        return await this.request('/models/current');
+    }
+
+    async switchModel(modelName) {
+        const payload = { model: modelName };
+        return await this.request('/models/switch', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    // Export/Import operations
+    async exportDocuments(format = 'json', options = {}) {
+        const payload = {
+            format: format,
             ...options
         };
 
         try {
-            const response = await fetch(`${this.baseURL}/search/rag`, {
+            const data = await this.makeRequest('/admin/export', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                responseType: 'blob'
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop(); // Keep incomplete line in buffer
-
-                for (const line of lines) {
-                    if (line.trim() === '') continue;
-
-                    try {
-                        const chunk = JSON.parse(line);
-                        if (onChunk) {
-                            onChunk(chunk);
-                        }
-                    } catch (e) {
-                        console.warn('Failed to parse chunk:', line);
-                    }
-                }
-            }
-
-            // Process any remaining buffer
-            if (buffer.trim()) {
-                try {
-                    const chunk = JSON.parse(buffer);
-                    if (onChunk) {
-                        onChunk(chunk);
-                    }
-                } catch (e) {
-                    console.warn('Failed to parse final chunk:', buffer);
-                }
-            }
-
-            return { success: true };
-
+            return {
+                success: true,
+                data: data.data,
+                headers: data.headers
+            };
         } catch (error) {
             return {
                 success: false,
@@ -775,197 +655,324 @@ class RAGClient {
         }
     }
 
-    // WebSocket support for real-time updates
-    createWebSocket(endpoint, options = {}) {
-        const wsUrl = this.baseURL.replace('http', 'ws') + endpoint;
+    async importDocuments(file, options = {}) {
+        const formData = new FormData();
+        formData.append('file', file);
 
+        if (options.merge) {
+            formData.append('merge', options.merge.toString());
+        }
+
+        if (options.overwrite) {
+            formData.append('overwrite', options.overwrite.toString());
+        }
+
+        return await this.request('/admin/import', {
+            method: 'POST',
+            body: formData,
+            headers: {} // Don't set Content-Type for FormData
+        });
+    }
+
+    // Configuration management
+    async getConfig() {
+        return await this.request('/admin/config');
+    }
+
+    async updateConfig(config) {
+        return await this.request('/admin/config', {
+            method: 'PUT',
+            body: JSON.stringify(config)
+        });
+    }
+
+    // User session management
+    async createSession(sessionData = {}) {
+        return await this.request('/session/create', {
+            method: 'POST',
+            body: JSON.stringify(sessionData)
+        });
+    }
+
+    async getSession(sessionId) {
+        return await this.request(`/session/${sessionId}`);
+    }
+
+    async updateSession(sessionId, sessionData) {
+        return await this.request(`/session/${sessionId}`, {
+            method: 'PUT',
+            body: JSON.stringify(sessionData)
+        });
+    }
+
+    async deleteSession(sessionId) {
+        return await this.request(`/session/${sessionId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    // Advanced search operations
+    async searchWithFilters(query, filters = {}) {
+        const payload = {
+            query: query,
+            filters: filters
+        };
+
+        return await this.request('/search/filtered', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async searchSimilarDocuments(documentId, options = {}) {
+        const payload = {
+            document_id: documentId,
+            ...options
+        };
+
+        return await this.request('/search/similar', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async searchByCategory(category, options = {}) {
+        const payload = {
+            category: category,
+            ...options
+        };
+
+        return await this.request('/search/category', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    // Document analysis
+    async analyzeDocument(documentId) {
+        return await this.request(`/pdf/${documentId}/analyze`, {
+            method: 'POST'
+        });
+    }
+
+    async getDocumentSummary(documentId) {
+        return await this.request(`/pdf/${documentId}/summary`);
+    }
+
+    async getDocumentKeywords(documentId) {
+        return await this.request(`/pdf/${documentId}/keywords`);
+    }
+
+    async getDocumentEntities(documentId) {
+        return await this.request(`/pdf/${documentId}/entities`);
+    }
+
+    // Feedback and rating
+    async submitFeedback(feedback) {
+        return await this.request('/feedback', {
+            method: 'POST',
+            body: JSON.stringify(feedback)
+        });
+    }
+
+    async rateResponse(responseId, rating, comment = '') {
+        const payload = {
+            response_id: responseId,
+            rating: rating,
+            comment: comment
+        };
+
+        return await this.request('/feedback/rate', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    // Monitoring and alerts
+    async getSystemAlerts() {
+        return await this.request('/admin/alerts');
+    }
+
+    async acknowledgeAlert(alertId) {
+        return await this.request(`/admin/alerts/${alertId}/acknowledge`, {
+            method: 'POST'
+        });
+    }
+
+    // Backup and restore
+    async createBackup(options = {}) {
+        return await this.request('/admin/backup', {
+            method: 'POST',
+            body: JSON.stringify(options)
+        });
+    }
+
+    async restoreBackup(backupId) {
+        return await this.request(`/admin/backup/${backupId}/restore`, {
+            method: 'POST'
+        });
+    }
+
+    async listBackups() {
+        return await this.request('/admin/backups');
+    }
+
+    // Error handling utilities
+    handleError(error, context = '') {
+        console.error(`RAGClient error${context ? ` in ${context}` : ''}:`, error);
+
+        // Common error messages
+        const errorMessages = {
+            'NetworkError': 'Network connection failed. Please check your internet connection.',
+            'TimeoutError': 'Request timed out. Please try again.',
+            'AbortError': 'Request was cancelled.',
+            'QuotaExceededError': 'Storage quota exceeded.',
+            'NotFoundError': 'Resource not found.',
+            'UnauthorizedError': 'Unauthorized access.',
+            'ForbiddenError': 'Access forbidden.',
+            'ValidationError': 'Invalid input data.',
+            'ServerError': 'Internal server error. Please try again later.'
+        };
+
+        // Return user-friendly error message
+        const errorType = error.name || 'Error';
+        return errorMessages[errorType] || error.message || 'An unexpected error occurred';
+    }
+
+    // Connection status
+    async checkConnection() {
         try {
-            const ws = new WebSocket(wsUrl);
+            const startTime = Date.now();
+            const result = await this.healthCheck();
+            const latency = Date.now() - startTime;
 
-            ws.onopen = function(event) {
-                console.log('WebSocket connected:', wsUrl);
-                if (options.onOpen) {
-                    options.onOpen(event);
-                }
+            return {
+                connected: result.success,
+                latency: latency,
+                status: result.success ? 'healthy' : 'unhealthy',
+                data: result.data
             };
-
-            ws.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (options.onMessage) {
-                        options.onMessage(data);
-                    }
-                } catch (error) {
-                    console.error('Failed to parse WebSocket message:', error);
-                }
-            };
-
-            ws.onerror = function(event) {
-                console.error('WebSocket error:', event);
-                if (options.onError) {
-                    options.onError(event);
-                }
-            };
-
-            ws.onclose = function(event) {
-                console.log('WebSocket closed:', event.code, event.reason);
-                if (options.onClose) {
-                    options.onClose(event);
-                }
-            };
-
-            return ws;
-
         } catch (error) {
-            console.error('Failed to create WebSocket:', error);
+            return {
+                connected: false,
+                latency: -1,
+                status: 'disconnected',
+                error: this.handleError(error, 'connection check')
+            };
+        }
+    }
+
+    // Utility to get current timestamp
+    getCurrentTimestamp() {
+        return new Date().toISOString();
+    }
+
+    // Helper to create a unique request ID
+    generateRequestId() {
+        return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    // Method to track API usage
+    trackAPIUsage(endpoint, method, duration, success) {
+        const usage = {
+            endpoint: endpoint,
+            method: method,
+            duration: duration,
+            success: success,
+            timestamp: this.getCurrentTimestamp()
+        };
+
+        // Store in localStorage for analytics
+        try {
+            const existingUsage = JSON.parse(localStorage.getItem('ragclient_usage') || '[]');
+            existingUsage.push(usage);
+
+            // Keep only last 100 records
+            if (existingUsage.length > 100) {
+                existingUsage.splice(0, existingUsage.length - 100);
+            }
+
+            localStorage.setItem('ragclient_usage', JSON.stringify(existingUsage));
+        } catch (error) {
+            console.warn('Failed to track API usage:', error);
+        }
+    }
+
+    // Method to get API usage statistics
+    getAPIUsageStats() {
+        try {
+            const usage = JSON.parse(localStorage.getItem('ragclient_usage') || '[]');
+
+            const stats = {
+                totalRequests: usage.length,
+                successfulRequests: usage.filter(u => u.success).length,
+                failedRequests: usage.filter(u => !u.success).length,
+                averageResponseTime: usage.reduce((sum, u) => sum + (u.duration || 0), 0) / usage.length,
+                endpointUsage: {}
+            };
+
+            // Calculate endpoint usage
+            usage.forEach(u => {
+                if (!stats.endpointUsage[u.endpoint]) {
+                    stats.endpointUsage[u.endpoint] = 0;
+                }
+                stats.endpointUsage[u.endpoint]++;
+            });
+
+            return stats;
+        } catch (error) {
+            console.warn('Failed to get API usage stats:', error);
             return null;
         }
     }
 
-    // Analytics and tracking
-    async trackEvent(event, data = {}) {
-        const payload = {
-            event: event,
-            data: data,
-            timestamp: new Date().toISOString(),
-            session_id: this.getSessionId(),
-            user_agent: navigator.userAgent,
-            url: window.location.href
-        };
-
+    // Method to clear API usage history
+    clearAPIUsageHistory() {
         try {
-            return await this.request('/analytics/track', {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
+            localStorage.removeItem('ragclient_usage');
+            console.log('API usage history cleared');
         } catch (error) {
-            console.warn('Failed to track event:', error);
-            return { success: false, error: error.message };
-        }
-    }
-
-    getSessionId() {
-        let sessionId = sessionStorage.getItem('rag_session_id');
-        if (!sessionId) {
-            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            sessionStorage.setItem('rag_session_id', sessionId);
-        }
-        return sessionId;
-    }
-
-    // Cache management
-    createCache(ttl = 300000) { // 5 minutes default TTL
-        const cache = new Map();
-
-        return {
-            get: (key) => {
-                const item = cache.get(key);
-                if (!item) return null;
-
-                if (Date.now() > item.expiry) {
-                    cache.delete(key);
-                    return null;
-                }
-
-                return item.data;
-            },
-
-            set: (key, data) => {
-                cache.set(key, {
-                    data: data,
-                    expiry: Date.now() + ttl
-                });
-            },
-
-            delete: (key) => {
-                cache.delete(key);
-            },
-
-            clear: () => {
-                cache.clear();
-            },
-
-            size: () => cache.size
-        };
-    }
-
-    // Request interceptors
-    addRequestInterceptor(interceptor) {
-        this.requestInterceptors = this.requestInterceptors || [];
-        this.requestInterceptors.push(interceptor);
-    }
-
-    addResponseInterceptor(interceptor) {
-        this.responseInterceptors = this.responseInterceptors || [];
-        this.responseInterceptors.push(interceptor);
-    }
-
-    // Performance monitoring
-    async measurePerformance(name, operation) {
-        const start = performance.now();
-        try {
-            const result = await operation();
-            const end = performance.now();
-            const duration = end - start;
-
-            console.log(`⏱️ ${name} took ${duration.toFixed(2)}ms`);
-
-            // Track performance metric
-            this.trackEvent('performance', {
-                operation: name,
-                duration: duration,
-                success: true
-            });
-
-            return result;
-        } catch (error) {
-            const end = performance.now();
-            const duration = end - start;
-
-            console.error(`❌ ${name} failed after ${duration.toFixed(2)}ms:`, error);
-
-            // Track performance metric
-            this.trackEvent('performance', {
-                operation: name,
-                duration: duration,
-                success: false,
-                error: error.message
-            });
-
-            throw error;
+            console.warn('Failed to clear API usage history:', error);
         }
     }
 }
 
-// Create and export global instance
-window.ragClient = window.ragClient || new RAGClient();
+// Initialize global RAGClient instance
+function initializeRAGClient() {
+    const baseURL = window.API_BASE_URL || 'http://localhost:8000';
+    window.ragClient = new RAGClient(baseURL);
 
-// Export for use in other modules
+    console.log('Global RAGClient initialized');
+
+    // Set up periodic connection check
+    setInterval(async () => {
+        try {
+            const status = await window.ragClient.checkConnection();
+            if (window.updateConnectionStatus) {
+                window.updateConnectionStatus(status);
+            }
+        } catch (error) {
+            console.warn('Connection check failed:', error);
+        }
+    }, 30000); // Check every 30 seconds
+
+    return window.ragClient;
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeRAGClient);
+} else {
+    initializeRAGClient();
+}
+
+// Export for module systems
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = RAGClient;
 }
 
-// Additional utility functions
-window.createRAGClient = function(baseURL) {
-    return new RAGClient(baseURL);
-};
-
-// Initialize connection check on load
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('RAGClient initialized');
-
-    // Test initial connection
-    try {
-        const status = await window.ragClient.testConnection();
-        if (status.connected) {
-            console.log('✅ RAG API connection established');
-        } else {
-            console.warn('⚠️ RAG API connection failed');
-        }
-    } catch (error) {
-        console.error('❌ Failed to test RAG API connection:', error);
-    }
-});
-
-console.log('RAG Client library loaded');
+// Export for ES6 modules
+if (typeof window !== 'undefined') {
+    window.RAGClient = RAGClient;
+}
 

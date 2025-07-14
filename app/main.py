@@ -448,14 +448,13 @@ async def get_status():
         except:
             chroma_status = "error"
 
-    # Check Ollama status
+    # Check Ollama status (without model check)
     ollama_status = "disconnected"
     if ollama_service:
         try:
             is_available = await ollama_service.is_available()
             if is_available:
-                models = await ollama_service.get_available_models()
-                ollama_status = f"connected ({len(models)} models)"
+                ollama_status = "connected"
             else:
                 ollama_status = "unavailable"
         except:

@@ -33,6 +33,9 @@
                     <button class="btn btn-ghost btn-sm" onclick="showHelp()" title="Help">
                         <i class="fas fa-question-circle"></i>
                     </button>
+                    <button class="btn btn-ghost btn-sm" onclick="logout()" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
                 </nav>
             </div>
         </div>
@@ -81,7 +84,7 @@
                             </button>
 
                             <div id="uploadProgress" class="upload-progress" style="display: none;">
-                                                                <div class="progress">
+                                <div class="progress">
                                     <div class="progress-bar" role="progressbar" style="width: 0%"></div>
                                 </div>
                                 <small id="uploadStatus">Preparing upload...</small>
@@ -112,120 +115,283 @@
                 <!-- Main Chat Area -->
                 <div class="col-main">
                     <div class="section chat-section">
-                        <div class="section-header">
-                            <h2 class="section-title">
-                                <i class="fas fa-comments"></i> Retrieval-augmented generation
-                            </h2>
-                            <div class="section-actions">
-                                <button class="btn btn-outline btn-sm" onclick="clearChat()">
-                                    <i class="fas fa-trash"></i> Clear
-                                </button>
-                                <button class="btn btn-outline btn-sm" onclick="loadStats()">
-                                    <i class="fas fa-sync"></i> Refresh
-                                </button>
-                                <button class="btn btn-outline btn-sm" onclick="toggleAdvancedSearch()" title="Advanced Search">
-                                    <i class="fas fa-cog"></i> Advanced
-                                </button>
-                            </div>
+                        <!-- Chat Panel Tabs -->
+                        <div class="chat-tabs">
+                            <button class="chat-tab active" id="ragTab" onclick="switchChatPanel('rag')">
+                                <i class="fas fa-brain"></i> AI Q&A
+                            </button>
+                            <button class="chat-tab" id="searchTab" onclick="switchChatPanel('search')">
+                                <i class="fas fa-search"></i> Elite Deep Search
+                            </button>
                         </div>
 
-                        <!-- Search Mode Selector -->
-                        <div class="search-options">
-                            <div class="search-mode-selector">
-                                <button type="button" class="search-mode-btn active" data-mode="rag" onclick="setSearchMode('rag')">
-                                    <i class="fas fa-brain"></i> Specific
-                                </button>
-                                <button type="button" class="search-mode-btn" data-mode="search" onclick="setSearchMode('search')">
-                                    <i class="fas fa-search"></i> Related
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Advanced Search Panel -->
-                        <div id="advancedSearchPanel" class="advanced-search-panel" style="display: none;">
-                            <h4><i class="fas fa-filter"></i> Advanced Search Options</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label class="form-label">Document Type</label>
-                                    <select class="form-control" id="filterDocType">
-                                        <option value="">All Types</option>
-                                        <option value="pdf">PDF</option>
-                                        <option value="docx">Word Document</option>
-                                        <option value="txt">Text File</option>
-                                        <option value="md">Markdown</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Category</label>
-                                    <select class="form-control" id="filterCategory">
-                                        <option value="">All Categories</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Max Results</label>
-                                    <select class="form-control" id="maxResults">
-                                        <option value="5">5 Results</option>
-                                        <option value="10" selected>10 Results</option>
-                                        <option value="20">20 Results</option>
-                                        <option value="50">50 Results</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-actions">
-                                <button class="btn btn-outline btn-sm" onclick="resetAdvancedSearch()">
-                                    <i class="fas fa-undo"></i> Reset
-                                </button>
-                                <button class="btn btn-primary btn-sm" onclick="applyAdvancedSearch()">
-                                    <i class="fas fa-search"></i> Apply Filters
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Chat Container -->
-                        <div class="chat-container">
-                            <div class="chat-messages" id="chatContainer">
-                                <div class="welcome-message">
-                                    <div class="card">
-                                        <div class="card-header">
-                                            <h3 class="card-title">
-                                                <i class="fas fa-info-circle"></i> Welcome to RAG Document Search!
-                                            </h3>
-                                        </div>
-                                        <div class="card-body">
-                                            <p>You can:</p>
-                                            <ul>
-                                                <li>Upload various document types: PDF, Word, Excel, PowerPoint, Text, Markdown, and more</li>
-                                                <li>Ask questions about your documents using AI</li>
-                                                <li>Search for specific content across all documents</li>
-                                                <li>Get AI-powered answers with source citations</li>
-                                                <li>Process images with OCR for text extraction</li>
-                                            </ul>
-                                            <p class="text-muted">
-                                                <strong>Tip:</strong> Use <kbd>Ctrl+K</kbd> to focus search, <kbd>Ctrl+L</kbd> to clear chat.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Chat Input -->
-                            <div class="chat-input-container">
-                                <form id="chatForm" class="chat-input-form">
-                                    <div class="input-wrapper">
-                                        <textarea class="chat-input" id="messageInput"
-                                                 placeholder="Ask a question about your documents..."
-                                                 rows="1" required></textarea>
-                                        <div class="input-actions">
-                                            <button type="button" class="btn btn-ghost btn-sm" onclick="showSearchHistory()" title="Search History">
-                                                <i class="fas fa-history"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <button class="chat-send-btn" type="submit" id="sendButton" title="Send message">
-                                        <i class="fas fa-paper-plane"></i>
+                        <!-- RAG Panel -->
+                        <div class="chat-panel rag-panel active" id="ragPanel">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <i class="fas fa-brain"></i> AI-Powered Document Q&A
+                                </h2>
+                                <div class="section-actions">
+                                    <button class="btn btn-outline btn-sm" onclick="clearChat('rag')">
+                                        <i class="fas fa-trash"></i> Clear
                                     </button>
-                                </form>
+                                    <button class="btn btn-outline btn-sm" onclick="loadStats()">
+                                        <i class="fas fa-sync"></i> Refresh
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="toggleAdvancedSearch('rag')" title="Advanced Search">
+                                        <i class="fas fa-cog"></i> Advanced
+                                    </button>
+                                </div>
                             </div>
+
+                            <!-- RAG Advanced Search Panel -->
+                            <div id="ragAdvancedSearchPanel" class="advanced-search-panel rag-advanced" style="display: none;">
+                                <h4><i class="fas fa-brain"></i> AI Search Options</h4>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Response Length</label>
+                                        <select class="form-control" id="ragResponseLength">
+                                            <option value="short">Short & Concise</option>
+                                            <option value="medium" selected>Medium Detail</option>
+                                            <option value="long">Comprehensive</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Context Depth</label>
+                                        <select class="form-control" id="ragContextDepth">
+                                            <option value="focused">Focused Context</option>
+                                            <option value="balanced" selected>Balanced</option>
+                                            <option value="comprehensive">Comprehensive</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Source Citations</label>
+                                        <select class="form-control" id="ragCitations">
+                                            <option value="minimal">Minimal</option>
+                                            <option value="standard" selected>Standard</option>
+                                            <option value="detailed">Detailed</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Document Type</label>
+                                        <select class="form-control" id="ragFilterDocType">
+                                            <option value="">All Types</option>
+                                            <option value="pdf">PDF</option>
+                                            <option value="docx">Word Document</option>
+                                            <option value="txt">Text File</option>
+                                            <option value="md">Markdown</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Category</label>
+                                        <select class="form-control" id="ragFilterCategory">
+                                            <option value="">All Categories</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-outline btn-sm" onclick="resetAdvancedSearch('rag')">
+                                        <i class="fas fa-undo"></i> Reset
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="applyAdvancedSearch('rag')">
+                                        <i class="fas fa-brain"></i> Apply Settings
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- RAG Chat Container -->
+                            <div class="chat-container rag-container">
+                                <div class="chat-messages" id="ragChatContainer">
+                                    <div class="welcome-message">
+                                        <div class="card rag-welcome">
+                                            <div class="card-header">
+                                                <h3 class="card-title">
+                                                    <i class="fas fa-brain"></i> Welcome to AI-Powered Document Q&A!
+                                                </h3>
+                                            </div>
+                                            <div class="card-body">
+                                                <p>Ask questions about your documents and get AI-powered answers with source citations:</p>
+                                                <ul>
+                                                    <li>Get intelligent responses based on document content</li>
+                                                    <li>Receive contextual answers with source references</li>
+                                                    <li>Ask follow-up questions for deeper understanding</li>
+                                                    <li>Get summaries and explanations from your documents</li>
+                                                </ul>
+                                                <p class="text-muted">
+                                                    <strong>Tip:</strong> Ask specific questions for better results. Use <kbd>Ctrl+K</kbd> to focus, <kbd>Ctrl+L</kbd> to clear.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- RAG Chat Input -->
+                                <div class="chat-input-container rag-input">
+                                    <form id="ragChatForm" class="chat-input-form">
+                                        <div class="input-wrapper">
+                                            <textarea class="chat-input" id="ragMessageInput"
+                                                     placeholder="Ask a question about your documents..."
+                                                     rows="1" required></textarea>
+                                            <div class="input-actions">
+                                                <button type="button" class="btn btn-ghost btn-sm" onclick="showSearchHistory('rag')" title="Search History">
+                                                    <i class="fas fa-history"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button class="chat-send-btn rag-send" type="submit" id="ragSendButton" title="Send message">
+                                            <i class="fas fa-paper-plane"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Search Panel -->
+                        <div class="chat-panel search-panel" id="searchPanel">
+                            <div class="section-header">
+                                <h2 class="section-title">
+                                    <i class="fas fa-search"></i> Elite Deep Search
+                                </h2>
+                                <div class="section-actions">
+                                    <button class="btn btn-outline btn-sm" onclick="clearChat('search')">
+                                        <i class="fas fa-trash"></i> Clear
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="loadStats()">
+                                        <i class="fas fa-sync"></i> Refresh
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="toggleAdvancedSearch('search')" title="Advanced Search">
+                                        <i class="fas fa-cog"></i> Advanced
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Search Advanced Search Panel -->
+                            <div id="searchAdvancedSearchPanel" class="advanced-search-panel search-advanced" style="display: none;">
+                                <h4><i class="fas fa-search"></i> Search Options</h4>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Search Type</label>
+                                        <select class="form-control" id="searchType">
+                                            <option value="semantic" selected>Semantic Search</option>
+                                            <option value="exact">Exact Match</option>
+                                            <option value="fuzzy">Fuzzy Search</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Max Results</label>
+                                        <select class="form-control" id="searchMaxResults">
+                                            <option value="5">5 Results</option>
+                                            <option value="10" selected>10 Results</option>
+                                            <option value="20">20 Results</option>
+                                            <option value="50">50 Results</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Sort By</label>
+                                        <select class="form-control" id="searchSortBy">
+                                            <option value="relevance" selected>Relevance</option>
+                                            <option value="date">Date Modified</option>
+                                            <option value="title">Title</option>
+                                            <option value="size">File Size</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Document Type</label>
+                                        <select class="form-control" id="searchFilterDocType">
+                                            <option value="">All Types</option>
+                                            <option value="pdf">PDF</option>
+                                            <option value="docx">Word Document</option>
+                                            <option value="txt">Text File</option>
+                                            <option value="md">Markdown</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Category</label>
+                                        <select class="form-control" id="searchFilterCategory">
+                                            <option value="">All Categories</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Date Range</label>
+                                        <select class="form-control" id="searchDateRange">
+                                            <option value="">All Time</option>
+                                            <option value="today">Today</option>
+                                            <option value="week">This Week</option>
+                                            <option value="month">This Month</option>
+                                            <option value="year">This Year</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-outline btn-sm" onclick="resetAdvancedSearch('search')">
+                                        <i class="fas fa-undo"></i> Reset
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="applyAdvancedSearch('search')">
+                                        <i class="fas fa-search"></i> Apply Filters
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Search Chat Container -->
+                            <div class="chat-container search-container">
+                                <div class="chat-messages" id="searchChatContainer">
+                                    <div class="welcome-message">
+                                        <div class="card search-welcome">
+                                            <div class="card-header">
+                                                <h3 class="card-title">
+                                                    <i class="fas fa-search"></i> Welcome to Elite Deep Searchcd !
+                                                </h3>
+                                            </div>
+                                            <div class="card-body">
+                                                <p>Search for specific content across all your documents:</p>
+                                                <ul>
+                                                    <li>Find exact phrases or keywords in your documents</li>
+                                                    <li>Search across multiple file types and formats</li>
+                                                    <li>Filter results by document type, category, or date</li>
+                                                    <li>Get direct links to relevant document sections</li>
+                                                    <li>Use semantic search for related concepts</li>
+                                                </ul>
+                                                <p class="text-muted">
+                                                    <strong>Tip:</strong> Use quotes for exact phrases. Use <kbd>Ctrl+K</kbd> to focus, <kbd>Ctrl+L</kbd> to clear.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Search Chat Input -->
+                                <div class="chat-input-container search-input">
+                                    <form id="searchChatForm" class="chat-input-form">
+                                        <div class="input-wrapper">
+                                            <textarea class="chat-input" id="searchMessageInput"
+                                                     placeholder="Search for specific content..."
+                                                     rows="1" required></textarea>
+                                            <div class="input-actions">
+                                                <button type="button" class="btn btn-ghost btn-sm" onclick="showSearchHistory('search')" title="Search History">
+                                                    <i class="fas fa-history"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button class="chat-send-btn search-send" type="submit" id="searchSendButton" title="Send message">
+                                            <i class="fas fa-paper-plane"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Legacy compatibility - Hidden elements for backward compatibility -->
+                        <div style="display: none;">
+                            <div id="chatContainer"></div>
+                            <form id="chatForm">
+                                <textarea id="messageInput"></textarea>
+                                <button id="sendButton"></button>
+                            </form>
+                            <div id="advancedSearchPanel"></div>
                         </div>
                     </div>
                 </div>
@@ -303,10 +469,21 @@
                     </ul>
                 </div>
                 <div class="help-section">
-                    <h3><i class="fas fa-search"></i> Search Modes</h3>
+                    <h3><i class="fas fa-brain"></i> AI Q&A Panel</h3>
                     <ul>
-                        <li><strong>RAG Query:</strong> AI-powered answers with context from your documents</li>
-                        <li><strong>Search Only:</strong> Find specific content across all documents</li>
+                        <li><strong>AI-Powered Answers:</strong> Get intelligent responses with context from your documents</li>
+                        <li><strong>Source Citations:</strong> See exactly where information comes from</li>
+                        <li><strong>Follow-up Questions:</strong> Build on previous answers for deeper understanding</li>
+                        <li><strong>Context Options:</strong> Adjust response length and detail level</li>
+                    </ul>
+                </div>
+                <div class="help-section">
+                    <h3><i class="fas fa-search"></i> Document Search Panel</h3>
+                    <ul>
+                        <li><strong>Semantic Search:</strong> Find related content and concepts</li>
+                        <li><strong>Exact Match:</strong> Find specific phrases and keywords</li>
+                        <li><strong>Advanced Filters:</strong> Filter by document type, category, or date</li>
+                        <li><strong>Multiple Results:</strong> Browse through all matching content</li>
                     </ul>
                 </div>
             </div>
@@ -319,9 +496,10 @@
     <!-- Status Container -->
     <div class="status-container" id="statusContainer"></div>
 
-
-    <!-- JavaScript Files - Optimized Loading Order -->
+      <!-- JavaScript Files - Optimized Loading Order -->
     <script src="js/config.js"></script>           <!-- Configuration first -->
+    <!-- <script src="js/auth.js"></script>
+    <script src="js/login.js"></script>-->
     <script src="js/ragClient.js"></script>        <!-- API client second -->
     <script src="js/utils.js"></script>            <!-- Utilities third -->
     <script src="js/theme.js"></script>            <!-- UI utilities -->
@@ -333,10 +511,13 @@
     <script src="js/chat.js"></script>
     <script src="js/documents.js"></script>
     <script src="js/stats.js"></script>
+    <script src="js/chat-panels.js"></script>      <!-- Chat panels before app.js -->
     <script src="js/app.js"></script>              <!-- Main controller last -->
-
     <!-- Service Worker Registration -->
-    <script>
+
+
+
+        <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')

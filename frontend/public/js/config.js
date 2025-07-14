@@ -39,6 +39,14 @@ window.API_BASE_URL = getBaseUrl();
 
 window.APP_CONFIG = {
     // API Configuration
+    auth: {
+        accessKey: 'eliterag2025', // CHANGE THIS TO YOUR DESIRED ACCESS KEY
+        sessionDuration: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+        debugMode: false, // Set to true to show access key in console
+        enableAutoLogout: true, // Auto logout after session expires
+        showDebugInfo: false // Show debug info on login page
+    },
+
     api: {
         baseUrl: window.API_BASE_URL, // Reference the unified global
         timeout: 30000, // 30 seconds
@@ -149,7 +157,12 @@ window.APP_CONFIG = {
         documentNotFound: 'Document not found.',
         invalidFileType: 'Invalid file type. Please select a supported file format.',
         fileTooLarge: 'File size exceeds the maximum limit.',
-        noDocuments: 'No documents found. Please upload some documents first.'
+        noDocuments: 'No documents found. Please upload some documents first.',
+         // ADD AUTHENTICATION ERROR MESSAGES
+        authRequired: 'Authentication required. Please login to continue.',
+        invalidAccessKey: 'Invalid access key. Please try again.',
+        sessionExpired: 'Your session has expired. Please login again.',
+        accessDenied: 'Access denied. Invalid credentials.'
     },
 
     // Success Messages
@@ -157,7 +170,10 @@ window.APP_CONFIG = {
         uploadSuccess: 'File uploaded successfully!',
         deleteSuccess: 'Document deleted successfully!',
         searchComplete: 'Search completed successfully.',
-        settingsSaved: 'Settings saved successfully.'
+        settingsSaved: 'Settings saved successfully.',
+         loginSuccess: 'Login successful! Welcome to RAG Document Search.',
+        logoutSuccess: 'Logged out successfully.',
+        accessGranted: 'Access granted. Redirecting...'
     }
 };
 
