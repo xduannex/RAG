@@ -321,47 +321,6 @@ async def process_document(
         raise HTTPException(status_code=500, detail=f"Failed to start processing: {str(e)}")
 
 
-@router.delete("/{document_id}")
-async def delete_document(document_id: int, db: Session = Depends(get_db)):
-    """Delete a document and its associated data"""
-
-    try:
-        document = db.query(Document).filter(Document.id == document_id).first()
-
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-
-        # Delete from vector store
-        try:
-            await chroma_service.delete_documents(document_id)
-        except Exception as e:
-            logger.warning(f"Error deleting from vector store: {e}")
-
-        # Delete chunks from database
-        db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
-
-        # Delete file from filesystem
-        if os.path.exists(document.file_path):
-            try:
-                os.remove(document.file_path)
-                logger.info(f"Deleted file: {document.file_path}")
-            except Exception as e:
-                logger.warning(f"Could not delete file {document.file_path}: {e}")
-
-        # Delete document record
-        db.delete(document)
-        db.commit()
-
-        return {
-            "message": "Document deleted successfully",
-            "document_id": document_id
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting document {document_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
 
 
 @router.get("/{document_id}/chunks/{chunk_index}")

@@ -293,7 +293,11 @@ app = FastAPI(
     title="RAG Document Search API",
     version="1.0.0",
     description="Universal document search API supporting PDF, images, text files, and more",
+    docs_url=None,  # Disables Swagger UI
+    redoc_url=None,  # Disables ReDoc
+    openapi_url=None,  # Disables OpenAPI schema at /openapi.json
     lifespan=lifespan
+
 )
 
 # Enhanced CORS middleware for network access

@@ -150,36 +150,6 @@ async def download_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to serve document: {str(e)}")
 
-@router.delete("/{doc_id}")
-async def delete_document(
-    doc_id: int,
-    db: Session = Depends(get_db)
-):
-    """Delete a document"""
-    try:
-        document = db.query(Document).filter(Document.id == doc_id).first()
-
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-
-        # Delete file from disk
-        if document.file_path and os.path.exists(document.file_path):
-            os.remove(document.file_path)
-
-        # Delete from database
-        db.delete(document)
-        db.commit()
-
-        return {
-            "message": f"Document '{document.original_filename}' deleted successfully",
-            "id": doc_id
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
 
 @router.put("/{doc_id}")
 async def update_document(
