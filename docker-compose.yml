@@ -1,32 +1,88 @@
 version: '3.8'
 
 services:
-  rag-pdf-api:
-    build: .
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: rag-nginx
     ports:
-      - "8000:8000"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Frontend Container
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rag-frontend
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_API_URL=http://backend:8000
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Backend Container
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: rag-backend
+    expose:
+      - "8000"
     environment:
       - ENVIRONMENT=production
-      - OLLAMA_HOST=http://ollama:11434
-      - DATABASE_URL=sqlite:///./storage/app.db
-      - PDF_STORAGE_PATH=/app/storage/pdfs
-      - CHROMA_DB_PATH=/app/storage/chroma
+      - DATABASE_URL=sqlite:///app/storage/database.db
+      - CHROMA_DB_PATH=/app/storage/chroma_db
+      - UPLOAD_DIR=/app/storage/uploads
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CORS_ORIGINS=http://localhost,https://localhost
     volumes:
       - ./storage:/app/storage
-      - ./logs:/app/logs
     depends_on:
       - ollama
+    networks:
+      - rag-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
 
+  # Ollama Container
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+    container_name: rag-ollama
+    expose:
+      - "11434"
     volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_ORIGINS=*
+      - ./ollama_data:/root/.ollama
+    networks:
+      - rag-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+
+networks:
+  rag-network:
+    driver: bridge
 
 volumes:
+  storage:
   ollama_data:

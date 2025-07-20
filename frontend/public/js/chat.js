@@ -251,43 +251,102 @@ class ChatManager {
         }, 100);
     }
 
-    async sendRAGQuery(query) {
-        try {
-            console.log('Sending RAG query:', query);
-            console.log('Using API Base URL:', this.apiBaseUrl);
+    async sendOpenAIRAGQuery(query, config) {
+    try {
+        console.log('Sending OpenAI RAG query:', query);
+        console.log('Using OpenAI config:', config);
 
-            const payload = {
-                query: query,
-                max_results: 5,
-                similarity_threshold: 0.3,
-                model: 'qwen2.5:7b'
-            };
+        const payload = {
+            message: query,
+            config: config,
+            mode: 'rag'
+        };
 
-            // Make sure the URL is properly constructed
-            const url = `${this.apiBaseUrl}/search/rag`;
-            console.log('Full request URL:', url);
+        const url = `${this.apiBaseUrl}/api/openai/rag`;
+        console.log('OpenAI request URL:', url);
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload)
-            });
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Response status:', response.status);
-                console.error('Response text:', errorText);
-                throw new Error(`RAG query failed: ${response.status} ${response.statusText} - ${errorText}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('RAG query error:', error);
-            throw error;
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('OpenAI API response status:', response.status);
+            console.error('OpenAI API response text:', errorText);
+            throw new Error(`OpenAI RAG query failed: ${response.status} ${response.statusText} - ${errorText}`);
         }
+
+        return await response.json();
+    } catch (error) {
+        console.error('OpenAI RAG query error:', error);
+        throw error;
     }
+}
+
+
+   async sendRAGQuery(query) {
+    try {
+        // Check if OpenAI is enabled
+        const ragConfig = window.getCurrentRagConfig ? window.getCurrentRagConfig() : null;
+
+        console.log('Current RAG config:', ragConfig); // Add this debug line
+
+        if (ragConfig && ragConfig.useOpenAI && ragConfig.openAI && ragConfig.openAI.api_key) {
+            console.log('OpenAI detected - using OpenAI endpoint'); // Add this debug line
+            return await this.sendOpenAIRAGQuery(query, ragConfig);
+        } else {
+            console.log('OpenAI not detected - using local LLM'); // Add this debug line
+            console.log('ragConfig.useOpenAI:', ragConfig?.useOpenAI); // Add this debug line
+            console.log('ragConfig.openAI.api_key:', ragConfig?.openAI?.api_key ? 'present' : 'missing'); // Add this debug line
+            return await this.sendLocalRAGQuery(query);
+        }
+    } catch (error) {
+        console.error('RAG query routing error:', error);
+        throw error;
+    }
+}
+
+async sendLocalRAGQuery(query) {
+    try {
+        console.log('Sending local RAG query:', query);
+        console.log('Using API Base URL:', this.apiBaseUrl);
+
+        const payload = {
+            query: query,
+            max_results: 5,
+            similarity_threshold: 0.3,
+            model: 'qwen2.5:7b'
+        };
+
+        const url = `${this.apiBaseUrl}/search/rag`;
+        console.log('Local RAG request URL:', url);
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Local RAG response status:', response.status);
+            console.error('Local RAG response text:', errorText);
+            throw new Error(`Local RAG query failed: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Local RAG query error:', error);
+        throw error;
+    }
+}
+
 
     async sendSearchQuery(query) {
         console.log('Sending search query:', query);
@@ -326,23 +385,40 @@ class ChatManager {
     }
 
     handleRAGResponse(response) {
-        if (response.success === false) {
-            this.addMessage('error', response.message || 'RAG query failed');
-            return;
-        }
+    if (response.success === false) {
+        this.addMessage('error', response.message || 'RAG query failed');
+        return;
+    }
 
-        const answer = response.answer || 'No answer generated';
+    // Handle OpenAI response format
+    if (response.response && response.model_used) {
+        const answer = response.response;
         const sources = response.sources || [];
 
-        // Add the AI response with typing animation
         this.addMessageWithTypingAnimation('assistant', answer, {
             sources: sources,
-            query: response.query,
             model: response.model_used,
-            responseTime: response.response_time,
-            totalSources: response.total_sources
+            responseTime: response.processing_time,
+            totalSources: sources.length,
+            tokensUsed: response.tokens_used,
+            provider: 'OpenAI'
         });
+        return;
     }
+
+    // Handle local LLM response format
+    const answer = response.answer || 'No answer generated';
+    const sources = response.sources || [];
+
+    this.addMessageWithTypingAnimation('assistant', answer, {
+        sources: sources,
+        query: response.query,
+        model: response.model_used,
+        responseTime: response.response_time,
+        totalSources: response.total_sources,
+        provider: 'Local LLM'
+    });
+}
 
     handleSearchResponse(response) {
         if (response.success === false) {

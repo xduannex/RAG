@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RAG PDF Search - Chat Interface</title>
 
+    <!-- Authentication Check - MUST BE FIRST, before any other content -->
+    <script>
+        // Immediate authentication check to prevent flickering
+        (function() {
+            const token = localStorage.getItem('rag_auth_token');
+            if (token !== 'authenticated') {
+                // Redirect immediately before any content loads
+                window.location.replace('login.html');
+                // Stop execution
+                throw new Error('Redirecting to login');
+            }
+        })();
+    </script>
+
     <!-- External Stylesheets -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
@@ -20,7 +34,7 @@
         <div class="container">
             <div class="header-content">
                 <a href="#" class="logo">
-                    <i class="fas fa-robot"></i> Document Repository
+                    <i class="fas fa-robot"></i>  KRBS RAG - SMS MANUAL AND PROCEDURE
                 </a>
                 <nav class="nav">
                     <div class="connection-indicator" id="connectionIndicator">
@@ -121,7 +135,7 @@
                                 <i class="fas fa-brain"></i> AI Q&A
                             </button>
                             <button class="chat-tab" id="searchTab" onclick="switchChatPanel('search')">
-                                <i class="fas fa-search"></i> Elite Deep Search
+                                <i class="fas fa-search"></i> ELITE DEEP SEARCH
                             </button>
                         </div>
 
@@ -129,7 +143,7 @@
                         <div class="chat-panel rag-panel active" id="ragPanel">
                             <div class="section-header">
                                 <h2 class="section-title">
-                                    <i class="fas fa-brain"></i> AI-Powered Document Q&A
+                                    <i class="fas fa-brain"></i> AI-POWERED DOCUMENT Q&A
                                 </h2>
                                 <div class="section-actions">
                                     <button class="btn btn-outline btn-sm" onclick="clearChat('rag')">
@@ -145,61 +159,123 @@
                             </div>
 
                             <!-- RAG Advanced Search Panel -->
-                            <div id="ragAdvancedSearchPanel" class="advanced-search-panel rag-advanced" style="display: none;">
-                                <h4><i class="fas fa-brain"></i> AI Search Options</h4>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label class="form-label">Response Length</label>
-                                        <select class="form-control" id="ragResponseLength">
-                                            <option value="short">Short & Concise</option>
-                                            <option value="medium" selected>Medium Detail</option>
-                                            <option value="long">Comprehensive</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Context Depth</label>
-                                        <select class="form-control" id="ragContextDepth">
-                                            <option value="focused">Focused Context</option>
-                                            <option value="balanced" selected>Balanced</option>
-                                            <option value="comprehensive">Comprehensive</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Source Citations</label>
-                                        <select class="form-control" id="ragCitations">
-                                            <option value="minimal">Minimal</option>
-                                            <option value="standard" selected>Standard</option>
-                                            <option value="detailed">Detailed</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label class="form-label">Document Type</label>
-                                        <select class="form-control" id="ragFilterDocType">
-                                            <option value="">All Types</option>
-                                            <option value="pdf">PDF</option>
-                                            <option value="docx">Word Document</option>
-                                            <option value="txt">Text File</option>
-                                            <option value="md">Markdown</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Category</label>
-                                        <select class="form-control" id="ragFilterCategory">
-                                            <option value="">All Categories</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-actions">
-                                    <button class="btn btn-outline btn-sm" onclick="resetAdvancedSearch('rag')">
-                                        <i class="fas fa-undo"></i> Reset
-                                    </button>
-                                    <button class="btn btn-primary btn-sm" onclick="applyAdvancedSearch('rag')">
-                                        <i class="fas fa-brain"></i> Apply Settings
-                                    </button>
-                                </div>
-                            </div>
+                           <div id="ragAdvancedSearchPanel" class="advanced-search-panel rag-advanced" style="display: none;">
+    <h4><i class="fas fa-brain"></i> AI Search Options</h4>
+
+    <!-- LLM Provider Selection -->
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label">
+                <i class="fas fa-robot"></i> LLM Provider
+            </label>
+            <div class="toggle-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="ragUseOpenAI" onchange="toggleOpenAISettings()">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label" id="ragProviderLabel">Using Ollama (Local)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- OpenAI Settings (Hidden by default) -->
+    <div id="ragOpenAISettings" class="openai-settings" style="display: none;">
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i> OpenAI API Key
+                </label>
+                <div class="input-group">
+                    <input type="password" class="form-control" id="ragOpenAIKey"
+                           placeholder="Enter your OpenAI API key"
+                           autocomplete="off">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="toggleAPIKeyVisibility('ragOpenAIKey')" title="Show/Hide API Key">
+                        <i class="fas fa-eye" id="ragOpenAIKeyToggle"></i>
+                    </button>
+                </div>
+                <small class="form-text text-muted">
+                    <i class="fas fa-info-circle"></i> Your API key is stored locally and never sent to our servers
+                </small>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">OpenAI Model</label>
+                <select class="form-control" id="ragOpenAIModel">
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="gpt-4-turbo" selected>GPT-4 Turbo</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Temperature</label>
+                <select class="form-control" id="ragOpenAITemperature">
+                    <option value="0.0">0.0 (Deterministic)</option>
+                    <option value="0.1">0.1 (Very Focused)</option>
+                    <option value="0.3" selected>0.3 (Balanced)</option>
+                    <option value="0.5">0.5 (Moderate)</option>
+                    <option value="0.7">0.7 (Creative)</option>
+                    <option value="1.0">1.0 (Very Creative)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label">Response Length</label>
+            <select class="form-control" id="ragResponseLength">
+                <option value="short">Short & Concise</option>
+                <option value="medium" selected>Medium Detail</option>
+                <option value="long">Comprehensive</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Context Depth</label>
+            <select class="form-control" id="ragContextDepth">
+                <option value="focused">Focused Context</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="comprehensive">Comprehensive</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Source Citations</label>
+            <select class="form-control" id="ragCitations">
+                <option value="minimal">Minimal</option>
+                <option value="standard" selected>Standard</option>
+                <option value="detailed">Detailed</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label">Document Type</label>
+            <select class="form-control" id="ragFilterDocType">
+                <option value="">All Types</option>
+                <option value="pdf">PDF</option>
+                <option value="docx">Word Document</option>
+                <option value="txt">Text File</option>
+                <option value="md">Markdown</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Category</label>
+            <select class="form-control" id="ragFilterCategory">
+                <option value="">All Categories</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-actions">
+        <button class="btn btn-outline btn-sm" onclick="resetAdvancedSearch('rag')">
+            <i class="fas fa-undo"></i> Reset
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="applyAdvancedSearch('rag')">
+            <i class="fas fa-brain"></i> Apply Settings
+        </button>
+    </div>
+</div>
 
                             <!-- RAG Chat Container -->
                             <div class="chat-container rag-container">
@@ -252,7 +328,7 @@
                         <div class="chat-panel search-panel" id="searchPanel">
                             <div class="section-header">
                                 <h2 class="section-title">
-                                    <i class="fas fa-search"></i> Elite Deep Search
+                                    <i class="fas fa-search"></i> ELITE DEEP SEARCH
                                 </h2>
                                 <div class="section-actions">
                                     <button class="btn btn-outline btn-sm" onclick="clearChat('search')">
@@ -343,7 +419,7 @@
                                         <div class="card search-welcome">
                                             <div class="card-header">
                                                 <h3 class="card-title">
-                                                    <i class="fas fa-search"></i> Welcome to Elite Deep Searchcd !
+                                                    <i class="fas fa-search"></i> Welcome to Elite Deep Search !
                                                 </h3>
                                             </div>
                                             <div class="card-body">
@@ -496,10 +572,9 @@
     <!-- Status Container -->
     <div class="status-container" id="statusContainer"></div>
 
-      <!-- JavaScript Files - Optimized Loading Order -->
+    <!-- JavaScript Files - Optimized Loading Order -->
+    <script src="js/auth.js"></script>
     <script src="js/config.js"></script>           <!-- Configuration first -->
-    <!-- <script src="js/auth.js"></script>
-    <script src="js/login.js"></script>-->
     <script src="js/ragClient.js"></script>        <!-- API client second -->
     <script src="js/utils.js"></script>            <!-- Utilities third -->
     <script src="js/theme.js"></script>            <!-- UI utilities -->
@@ -513,11 +588,9 @@
     <script src="js/stats.js"></script>
     <script src="js/chat-panels.js"></script>      <!-- Chat panels before app.js -->
     <script src="js/app.js"></script>              <!-- Main controller last -->
+
     <!-- Service Worker Registration -->
-
-
-
-        <script>
+    <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')

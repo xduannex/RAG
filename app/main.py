@@ -23,6 +23,9 @@ from app.services.document_processor import DocumentProcessor
 # Import your existing routes
 from app.api.routes import pdf, search, admin, health, documents, pdfs
 
+from app.api.routes.openai import router as openai_router
+
+
 if os.path.exists("uploads"):
     app.mount("/storage/pdfs", StaticFiles(directory="uploads"), name="uploads")
 
@@ -379,6 +382,9 @@ app.include_router(pdfs.router, prefix="/api/pdfs", tags=["PDF Management"])
 
 # New universal documents route
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
+
+app.include_router(openai_router, prefix="/api", tags=["OpenAI"])
+
 
 
 # Root endpoint

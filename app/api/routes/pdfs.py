@@ -6,7 +6,7 @@ from typing import List, Optional
 import os
 import mimetypes
 
-from app.core.database import get_db
+from app.core.database import get_db, logger
 from app.models.database_models import Document  # Changed from PDFDocument to Document
 from app.config.settings import settings
 
@@ -112,6 +112,7 @@ async def get_document_info(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve document info: {str(e)}")
+
 
 @router.get("/{doc_id}/download")
 async def download_document(
@@ -265,3 +266,69 @@ async def test_endpoint():
         "endpoint": "/api/pdfs",
         "note": "This endpoint now uses the 'documents' table instead of 'pdfs'"
     }
+
+
+@router.delete("/{doc_id}")
+async def delete_document(
+        doc_id: int,
+        delete_file: bool = False,
+        db: Session = Depends(get_db)
+):
+    """Delete document and its chunks from vector store"""
+    try:
+        # Get document from database
+        document = db.query(Document).filter(Document.id == doc_id).first()
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Store document info for response
+        doc_info = {
+            "id": document.id,
+            "filename": document.original_filename,
+            "title": document.title
+        }
+
+        # Delete chunks from ChromaDB
+        try:
+            from app.services.chroma_service import get_chroma_service
+            chroma_service = get_chroma_service()
+
+            if chroma_service:
+                # Delete document chunks using document ID
+                await chroma_service.delete_document_chunks(doc_id)
+                logger.info(f"Deleted chunks for document {doc_id} from ChromaDB")
+            else:
+                logger.warning("ChromaDB service not available - chunks not deleted")
+        except Exception as e:
+            logger.error(f"Error deleting chunks from ChromaDB: {e}")
+            # Continue with database deletion even if vector store deletion fails
+
+        # Delete physical file if requested
+        if delete_file and document.file_path and os.path.exists(document.file_path):
+            try:
+                os.remove(document.file_path)
+                logger.info(f"Deleted physical file: {document.file_path}")
+            except Exception as e:
+                logger.error(f"Error deleting physical file: {e}")
+                # Continue with database deletion
+
+        # Delete from database
+        db.delete(document)
+        db.commit()
+
+        logger.info(f"Document {doc_id} deleted successfully")
+
+        return {
+            "message": "Document deleted successfully",
+            "document": doc_info,
+            "chunks_deleted": True,
+            "file_deleted": delete_file
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting document {doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")

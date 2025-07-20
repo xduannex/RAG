@@ -477,7 +477,7 @@
 
 .btn-outline {
     background: transparent;
-    color: var(--primary-color, #007bff);
+    color: #ED1C24;
     border-color: var(--primary-color, #007bff);
 }
 
