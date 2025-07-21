@@ -1110,11 +1110,11 @@ async sendLocalRAGQuery(query) {
                 this.renderMessageHistory();
             } else {
                 // Show welcome message
-                this.addMessage('assistant', 'Hello! I\'m your AI assistant. I can help you search through your documents and answer questions about them. What would you like to know?');
+                this.addMessage('assistant', 'Hello! I\'m KIRBI your AI assistant. I can help you search through your documents and answer questions about them. What would you like to know?');
             }
         } catch (error) {
             console.warn('Failed to load chat history:', error);
-            this.addMessage('assistant', 'Hello! I\'m your AI assistant. How can I help you today?');
+            this.addMessage('assistant', 'Hello! I\'m KIRBI your AI assistant. How can I help you today?');
         }
     }
 
