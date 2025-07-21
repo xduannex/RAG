@@ -511,26 +511,59 @@ async def advanced_search(
 
 
 @router.get("/stats")
-async def get_search_stats(request: Request):
+async def get_search_stats(request: Request, db: Session = Depends(get_db)):
     """Get search statistics"""
     try:
         services = get_services(request)
         chroma_service = services["chroma_service"]
 
+        # Get actual document count from database
+        actual_document_count = db.query(Document).count()
+
+        # Get processed document count
+        processed_document_count = db.query(Document).filter(
+            Document.processing_status == "completed"
+        ).count()
+
+        # Get failed document count
+        failed_document_count = db.query(Document).filter(
+            Document.processing_status == "failed"
+        ).count()
+
+        # Get processing document count
+        processing_document_count = db.query(Document).filter(
+            Document.processing_status.in_(["processing", "pending"])
+        ).count()
+
         if not chroma_service:
             return {
-                "success": False,
+                "success": True,
+                "stats": {
+                    "total_documents": actual_document_count,
+                    "processed_documents": processed_document_count,
+                    "processing_documents": processing_document_count,
+                    "failed_documents": failed_document_count,
+                    "collection_status": "unavailable",
+                    "embedding_model": "unknown",
+                    "search_service_available": False,
+                    "rag_service_available": False,
+                    "supported_operations": []
+                },
                 "message": "Search service not available"
             }
 
-        # Get ChromaDB statistics
-        stats = chroma_service.get_collection_stats()
+        # Get ChromaDB statistics for comparison
+        chroma_stats = chroma_service.get_collection_stats()
+        chroma_count = chroma_stats.get("total_documents", 0)
 
-        # Add search-specific statistics
+        # Add search-specific statistics using DATABASE count (not ChromaDB count)
         search_stats = {
-            "total_documents": stats.get("total_documents", 0),
-            "collection_status": stats.get("status", "unknown"),
-            "embedding_model": stats.get("embedding_model", "unknown"),
+            "total_documents": actual_document_count,  # Use database count
+            "processed_documents": processed_document_count,
+            "processing_documents": processing_document_count,
+            "failed_documents": failed_document_count,
+            "collection_status": chroma_stats.get("status", "unknown"),
+            "embedding_model": chroma_stats.get("embedding_model", "unknown"),
             "search_service_available": True,
             "rag_service_available": services["ollama_service"] is not None,
             "supported_operations": [
@@ -539,7 +572,11 @@ async def get_search_stats(request: Request):
                 "similar_documents",
                 "suggestions",
                 "advanced_search"
-            ]
+            ],
+            # Debug info to see the discrepancy
+            "chroma_document_count": chroma_count,
+            "database_document_count": actual_document_count,
+            "count_discrepancy": chroma_count - actual_document_count
         }
 
         # Remove None values
@@ -550,7 +587,7 @@ async def get_search_stats(request: Request):
         return {
             "success": True,
             "stats": search_stats,
-            "timestamp": stats.get("timestamp")
+            "timestamp": chroma_stats.get("timestamp")
         }
 
     except Exception as e:

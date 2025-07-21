@@ -481,6 +481,9 @@
             <div class="modal-header">
                 <h3 id="documentViewerTitle">Document Viewer</h3>
                 <div class="modal-actions">
+                    <button class="btn btn-sm btn-outline" id="backToDocumentList" onclick="returnToDocumentList()" title="Back to Document List" style="display: none;">
+                    <i class="fas fa-arrow-left"></i> Back to List
+                </button>
                     <button class="btn btn-sm btn-outline" id="modalDownloadBtn" onclick="window.downloadDocument()" title="Download">
                         <i class="fas fa-download"></i>
                     </button>
@@ -524,6 +527,77 @@
             </div>
         </div>
     </div>
+
+    <!-- Document List Modal -->
+<div id="documentListModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3 id="documentListTitle">Document Library</h3>
+            <div class="modal-actions">
+                <button class="btn btn-sm btn-outline" onclick="refreshDocumentList()" title="Refresh">
+                    <i class="fas fa-sync"></i>
+                </button>
+                <span class="close" id="closeDocumentList">&times;</span>
+            </div>
+        </div>
+        <div class="modal-body">
+            <!-- Search Bar -->
+            <div class="document-list-search">
+                <div class="input-wrapper">
+                    <input type="text"
+                           class="form-control"
+                           id="documentSearchInput"
+                           placeholder="Search documents by name or category..."
+                           style="margin-bottom: 20px;">
+                    <div class="input-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="clearDocumentSearch()" title="Clear Search">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Document List Container -->
+            <div id="documentListContent">
+                <div id="documentListLoading" class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading documents...</div>
+                </div>
+
+                <div id="documentListError" class="error-container" style="display: none;">
+                    <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+                    <div class="error-text">Failed to load documents</div>
+                    <button class="btn btn-sm btn-primary" onclick="loadDocumentList()">
+                        <i class="fas fa-retry"></i> Retry
+                    </button>
+                </div>
+
+                <div id="documentListTable" style="display: none;">
+                    <table class="document-table">
+                        <thead>
+                            <tr>
+                                <th>Document Name</th>
+                                <th>Category</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="documentListTableBody">
+                            <!-- Documents will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="documentListEmpty" style="display: none; text-align: center; padding: 40px;">
+                    <div class="empty-state">
+                        <i class="fas fa-file-alt" style="font-size: 48px; color: #ccc; margin-bottom: 20px;"></i>
+                        <h4>No Documents Found</h4>
+                        <p>No documents match your search criteria.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
     <!-- Help Modal -->
     <div id="helpModal" class="modal">

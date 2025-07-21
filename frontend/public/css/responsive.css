@@ -1,0 +1,390 @@
+/* Responsive Design for RAG Application */
+
+/* Mobile First Approach */
+:root {
+    --mobile-breakpoint: 768px;
+    --tablet-breakpoint: 1024px;
+    --desktop-breakpoint: 1200px;
+}
+
+/* Base Mobile Styles */
+@media (max-width: 767px) {
+    .container {
+        padding: 0.5rem;
+    }
+
+    .row {
+        flex-direction: column;
+    }
+
+    .col-sidebar {
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+
+    .col-main {
+        width: 100%;
+    }
+
+    /* Header adjustments */
+    .header-content {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .logo {
+        font-size: 1rem;
+        text-align: center;
+    }
+
+    .nav {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    /* Chat panels */
+    .chat-tabs {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .chat-tab {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Form adjustments */
+    .form-row {
+        flex-direction: column;
+    }
+
+    .form-group {
+        width: 100%;
+        margin-bottom: 0.75rem;
+    }
+
+    /* Upload area */
+    .upload-area {
+        padding: 1rem;
+    }
+
+    .upload-text {
+        font-size: 0.9rem;
+    }
+
+    .upload-subtext {
+        font-size: 0.8rem;
+    }
+
+    /* Stats grid */
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    /* Advanced search panels */
+    .advanced-search-panel {
+        padding: 0.75rem;
+    }
+
+    /* Chat messages */
+    .chat-messages {
+        height: 300px;
+    }
+
+    /* Modal adjustments */
+    .modal-content {
+        width: 95%;
+        margin: 2rem auto;
+        padding: 1rem;
+    }
+
+    .modal-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .modal-actions {
+        align-self: flex-end;
+    }
+
+    /* Button adjustments */
+    .btn-group {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .section-actions {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    /* Input adjustments */
+    .chat-input-form {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .input-wrapper {
+        width: 100%;
+    }
+
+    .chat-send-btn {
+        width: 100%;
+        align-self: center;
+    }
+
+    /* Hide less important elements on mobile */
+    .connection-indicator span {
+        display: none;
+    }
+
+    .connection-dot {
+        margin: 0;
+    }
+}
+
+/* Tablet Styles */
+@media (min-width: 768px) and (max-width: 1023px) {
+    .container {
+        padding: 1rem;
+    }
+
+    .col-sidebar {
+        width: 300px;
+        min-width: 300px;
+    }
+
+    .col-main {
+        flex: 1;
+    }
+
+    /* Form adjustments for tablet */
+    .form-row {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .form-group {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    /* Chat messages height */
+    .chat-messages {
+        height: 400px;
+    }
+
+    /* Modal adjustments */
+    .modal-content {
+        width: 90%;
+        max-width: 600px;
+    }
+}
+
+/* Desktop Styles */
+@media (min-width: 1024px) {
+    .container {
+        max-width: 1400px;
+        padding: 1.5rem;
+    }
+
+    .col-sidebar {
+        width: 320px;
+        min-width: 320px;
+    }
+
+    .col-main {
+        flex: 1;
+    }
+
+    /* Enhanced desktop features */
+    .chat-messages {
+        height: 500px;
+    }
+
+    /* Better spacing for larger screens */
+    .section {
+        margin-bottom: 2rem;
+    }
+
+    .form-row {
+        gap: 1rem;
+    }
+
+    /* Modal full features */
+    .modal-content {
+        width: 80%;
+        max-width: 800px;
+    }
+
+    .modal-large {
+        width: 90%;
+        max-width: 1000px;
+    }
+}
+
+/* Large Desktop Styles */
+@media (min-width: 1200px) {
+    .container {
+        max-width: 1600px;
+    }
+
+    .col-sidebar {
+        width: 360px;
+        min-width: 360px;
+    }
+
+    /* Enhanced chat experience */
+    .chat-messages {
+        height: 600px;
+    }
+
+    /* More comfortable spacing */
+    .section {
+        margin-bottom: 2.5rem;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .header,
+    .nav,
+    .sidebar,
+    .col-sidebar,
+    .chat-input-container,
+    .modal,
+    .btn {
+        display: none !important;
+    }
+
+    .col-main {
+        width: 100% !important;
+    }
+
+    .chat-messages {
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    .message {
+        page-break-inside: avoid;
+    }
+}
+
+/* Accessibility Improvements */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .card,
+    .message,
+    .btn {
+        border: 2px solid currentColor;
+    }
+}
+
+/* Dark mode responsive adjustments */
+@media (prefers-color-scheme: dark) {
+    .advanced-search-panel {
+        background: rgba(0, 0, 0, 0.3);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .modal-content {
+        background: var(--bg-secondary, #1a1a1a);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* Focus management for keyboard navigation */
+@media (max-width: 767px) {
+    .chat-input:focus {
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+}
+
+/* Landscape orientation on mobile */
+@media (max-width: 767px) and (orientation: landscape) {
+    .chat-messages {
+        height: 250px;
+    }
+
+    .header {
+        padding: 0.5rem 0;
+    }
+
+    .main-content {
+        padding-top: 0.5rem;
+    }
+}
+
+/* Very small screens */
+@media (max-width: 480px) {
+    .container {
+        padding: 0.25rem;
+    }
+
+    .section {
+        margin-bottom: 1rem;
+    }
+
+    .card {
+        padding: 0.75rem;
+    }
+
+    .btn {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.9rem;
+    }
+
+    .form-control {
+        padding: 0.5rem;
+    }
+
+    .chat-messages {
+        height: 250px;
+    }
+}
+
+/* Utility classes for responsive behavior */
+.mobile-only {
+    display: block;
+}
+
+.desktop-only {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .mobile-only {
+        display: none;
+    }
+
+    .desktop-only {
+        display: block;
+    }
+}
+
+/* Flexible grid system */
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+.flex-nowrap {
+    flex-wrap: nowrap;
+}
+
+@media (max-width: 767px) {
+    .flex-wrap {
+        flex-direction: column;
+    }
+}

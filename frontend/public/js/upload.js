@@ -4,20 +4,18 @@
 class UploadManager {
     constructor(ragClient) {
         this.ragClient = ragClient || window.ragClient;
-        this.uploadQueue = [];
         this.isUploading = false;
-        this.currentUpload = null;
-        this.maxConcurrentUploads = 3;
-        this.retryAttempts = 3;
 
-        console.log('UploadManager initialized with ragClient');
-        this.init();
+        console.log('UploadManager initialized');
+        // Defer initialization until DOM is loaded to ensure all elements are available
+        document.addEventListener('DOMContentLoaded', () => this.init());
     }
 
     init() {
         this.setupElements();
         this.setupEventListeners();
         this.setupDragAndDrop();
+        console.log('UploadManager elements and listeners are set up.');
     }
 
     setupElements() {
@@ -29,6 +27,7 @@ class UploadManager {
         this.progressBar = this.uploadProgress?.querySelector('.progress-bar');
         this.titleInput = document.getElementById('titleInput');
         this.categoryInput = document.getElementById('categoryInput');
+        this.uploadAreaText = this.uploadArea?.querySelector('.upload-text');
     }
 
     setupEventListeners() {
@@ -51,7 +50,7 @@ class UploadManager {
         if (!this.uploadArea) return;
 
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            this.uploadArea.addEventListener(eventName, (e) => this.preventDefaults(e), false);
+            this.uploadArea.addEventListener(eventName, this.preventDefaults, false);
         });
 
         ['dragenter', 'dragover'].forEach(eventName => {
@@ -84,270 +83,129 @@ class UploadManager {
         this.handleFiles(files);
     }
 
-    handleFormSubmit(e) {
-        e.preventDefault();
-        if (this.fileInput?.files.length > 0) {
-            this.handleFiles(this.fileInput.files);
-        }
-    }
-
     handleFileSelect(e) {
         this.handleFiles(e.target.files);
     }
 
     handleFiles(fileList) {
         const files = Array.from(fileList);
-        console.log(`Processing ${files.length} files for upload`);
+        if (files.length === 0) return;
 
-        // Validate files
-        const validFiles = [];
-        const errors = [];
+        // Update the file input so the form knows about the dropped/selected files
+        const dataTransfer = new DataTransfer();
+        files.forEach(file => dataTransfer.items.add(file));
+        this.fileInput.files = dataTransfer.files;
 
-        files.forEach(file => {
-            const validation = this.ragClient.validateFile(file);
-            if (validation.valid) {
-                validFiles.push(file);
+        // Update UI to show selected files
+        if (this.uploadAreaText) {
+            if (files.length === 1) {
+                this.uploadAreaText.textContent = `File selected: ${files[0].name}`;
             } else {
-                errors.push(`${file.name}: ${validation.errors.join(', ')}`);
+                this.uploadAreaText.textContent = `${files.length} files selected`;
             }
-        });
-
-        // Show validation errors
-        if (errors.length > 0) {
-            this.showErrors(errors);
-        }
-
-        // Upload valid files
-        if (validFiles.length > 0) {
-            this.queueUploads(validFiles);
         }
     }
 
-    queueUploads(files) {
-        const options = {
-            title: this.titleInput?.value || '',
-            category: this.categoryInput?.value || ''
-        };
+    handleFormSubmit(e) {
+        e.preventDefault();
+        if (this.isUploading) {
+            this.showNotification('An upload is already in progress.', 'warning');
+            return;
+        }
 
-        files.forEach(file => {
-            this.uploadQueue.push({
-                file: file,
-                options: { ...options },
-                id: this.generateUploadId(),
-                status: 'queued',
-                progress: 0,
-                attempts: 0
-            });
-        });
+        const files = this.fileInput?.files;
+        if (!files || files.length === 0) {
+            this.showNotification('Please select one or more files to upload.', 'error');
+            return;
+        }
 
-        this.processUploadQueue();
+        this.uploadFiles(Array.from(files));
     }
 
-    async processUploadQueue() {
-        if (this.isUploading || this.uploadQueue.length === 0) return;
-
+    async uploadFiles(files) {
         this.isUploading = true;
-        this.showUploadProgress();
-
-        const activeUploads = [];
-
-        while (this.uploadQueue.length > 0 || activeUploads.length > 0) {
-            // Start new uploads up to concurrent limit
-            while (activeUploads.length < this.maxConcurrentUploads && this.uploadQueue.length > 0) {
-                const upload = this.uploadQueue.shift();
-                activeUploads.push(this.uploadFile(upload));
-            }
-
-            // Wait for at least one upload to complete
-            if (activeUploads.length > 0) {
-                await Promise.race(activeUploads);
-                // Remove completed uploads
-                for (let i = activeUploads.length - 1; i >= 0; i--) {
-                    if (activeUploads[i].completed) {
-                        activeUploads.splice(i, 1);
-                    }
-                }
-            }
-        }
-
-        this.isUploading = false;
-        this.hideUploadProgress();
-        this.resetForm();
-    }
-
-    async uploadFile(uploadItem) {
-        const { file, options, id } = uploadItem;
-        uploadItem.status = 'uploading';
+        this.showProgress();
+        if (this.progressBar) this.progressBar.classList.remove('bg-danger', 'bg-success');
 
         try {
-            console.log(`Starting upload: ${file.name}`);
-            this.updateUploadStatus(`Uploading ${file.name}...`);
+            const options = {
+                title: this.titleInput?.value || '',
+                category: this.categoryInput?.value || ''
+            };
 
-            const formData = this.ragClient.createUploadFormData(file, options);
+            // Simplified: Upload files one by one for clearer progress and error handling
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const progress = Math.round(((i) / files.length) * 100);
+                this.updateProgress(progress, `Uploading ${i + 1}/${files.length}: ${file.name}...`);
 
-            const result = await this.ragClient.uploadDocument(formData, (progress) => {
-                uploadItem.progress = progress;
-                this.updateUploadProgress(uploadItem);
-            });
-
-            if (result.success) {
-                uploadItem.status = 'completed';
-                uploadItem.completed = true;
-
-                console.log(`Upload completed: ${file.name}`);
-                this.handleUploadSuccess(result.data, file);
-
-                // Dispatch event for other components
-                const event = new CustomEvent('documentUploaded', {
-                    detail: {
-                        document: result.data,
-                        filename: file.name
-                    }
-                });
-                document.dispatchEvent(event);
-
-            } else {
-                throw new Error(result.error);
+                const result = await this.ragClient.upload(file, options);
+                if (!result.success) {
+                    // Stop on the first error to provide clear feedback
+                    throw new Error(result.error || `Failed to upload ${file.name}`);
+                }
             }
+
+            this.updateProgress(100, `Successfully uploaded ${files.length} file(s)!`);
+            if (this.progressBar) this.progressBar.classList.add('bg-success');
+            this.showNotification(`Upload complete: ${files.length} file(s) processed.`, 'success');
+
+            // Refresh documents list and stats in the UI
+            if (window.documentsManager?.loadDocuments) window.documentsManager.loadDocuments();
+            if (window.loadStats) window.loadStats();
 
         } catch (error) {
-            console.error(`Upload failed: ${file.name}`, error);
-            uploadItem.attempts++;
-
-            if (uploadItem.attempts < this.retryAttempts) {
-                uploadItem.status = 'retrying';
-                console.log(`Retrying upload: ${file.name} (attempt ${uploadItem.attempts + 1})`);
-
-                // Add back to queue for retry
-                setTimeout(() => {
-                    this.uploadQueue.unshift(uploadItem);
-                }, 2000 * uploadItem.attempts); // Exponential backoff
-
-            } else {
-                uploadItem.status = 'failed';
-                uploadItem.completed = true;
-                this.handleUploadError(error, file);
-            }
+            console.error('Upload failed:', error);
+            this.updateProgress(100, `Upload failed: ${error.message}`);
+            if (this.progressBar) this.progressBar.classList.add('bg-danger');
+            this.showNotification(`Upload failed: ${error.message}`, 'error');
+        } finally {
+            // CRITICAL FIX: Always reset the uploading state to prevent the UI from hanging
+            this.isUploading = false;
+            this.resetForm();
+            // Hide progress bar after a delay to allow user to see the final status
+            setTimeout(() => this.hideProgress(), 5000);
         }
-
-        return uploadItem;
     }
 
-    updateUploadProgress(uploadItem) {
+    showProgress() {
+        if (this.uploadProgress) this.uploadProgress.style.display = 'block';
+    }
+
+    hideProgress() {
+        if (this.uploadProgress) this.uploadProgress.style.display = 'none';
+    }
+
+    updateProgress(percentage, message) {
         if (this.progressBar) {
-            this.progressBar.style.width = `${uploadItem.progress}%`;
+            this.progressBar.style.width = `${percentage}%`;
         }
-
-        this.updateUploadStatus(`Uploading ${uploadItem.file.name}... ${Math.round(uploadItem.progress)}%`);
-    }
-
-    updateUploadStatus(message) {
         if (this.uploadStatus) {
             this.uploadStatus.textContent = message;
         }
     }
 
-    showUploadProgress() {
-        if (this.uploadProgress) {
-            this.uploadProgress.style.display = 'block';
-        }
-    }
-
-    hideUploadProgress() {
-        if (this.uploadProgress) {
-            this.uploadProgress.style.display = 'none';
-        }
-
-        if (this.progressBar) {
-            this.progressBar.style.width = '0%';
-        }
-    }
-
-    handleUploadSuccess(document, file) {
-        const message = `${file.name} uploaded successfully`;
-        console.log(message, document);
-
-        if (window.showStatus) {
-            window.showStatus(message, 'success');
-        }
-    }
-
-    handleUploadError(error, file) {
-        const message = `Failed to upload ${file.name}: ${error.message}`;
-        console.error(message);
-
-        if (window.showStatus) {
-            window.showStatus(message, 'error');
-        }
-    }
-
-    showErrors(errors) {
-        const message = 'File validation errors:\n' + errors.join('\n');
-        console.error(message);
-
-        if (window.showStatus) {
-            window.showStatus('Some files were rejected due to validation errors', 'warning');
-        }
-    }
-
     resetForm() {
-        if (this.uploadForm) {
-            this.uploadForm.reset();
+        if (this.uploadForm) this.uploadForm.reset();
+        if (this.uploadAreaText) {
+            this.uploadAreaText.textContent = 'Drop files here or click to browse';
         }
-
-        if (this.titleInput) this.titleInput.value = '';
-        if (this.categoryInput) this.categoryInput.value = '';
     }
 
-    generateUploadId() {
-        return 'upload_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    // Public API methods
-    async uploadSingleFile(file, options = {}) {
-        const validation = this.ragClient.validateFile(file);
-        if (!validation.valid) {
-            throw new Error('File validation failed: ' + validation.errors.join(', '));
+    showNotification(message, type = 'info') {
+        // Assumes a global showStatus or similar function exists (from a notifications.js file)
+        if (window.showStatus) {
+            window.showStatus(message, type);
+        } else {
+            // Fallback if the notification system isn't available
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            if (type === 'error') alert(`ERROR: ${message}`);
         }
-
-        const formData = this.ragClient.createUploadFormData(file, options);
-        const result = await this.ragClient.uploadDocument(formData);
-
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-
-        return result.data;
-    }
-
-    getUploadQueue() {
-        return [...this.uploadQueue];
-    }
-
-    clearUploadQueue() {
-        this.uploadQueue = [];
-    }
-
-    isUploadInProgress() {
-        return this.isUploading;
-    }
-
-    // Cleanup method
-    cleanup() {
-        this.uploadQueue = [];
-        this.isUploading = false;
-        this.currentUpload = null;
     }
 }
 
-// Create global instance if it doesn't exist
+// Global instance initialization, ensuring it only runs once
 if (!window.uploadManager) {
-    document.addEventListener('DOMContentLoaded', () => {
-        if (window.ragClient) {
-            window.uploadManager = new UploadManager(window.ragClient);
-            console.log('Global UploadManager created');
-        }
-    });
+    // The constructor now handles waiting for DOMContentLoaded
+    window.uploadManager = new UploadManager(window.ragClient);
 }
-
-console.log('Upload manager loaded');

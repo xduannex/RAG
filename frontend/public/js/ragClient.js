@@ -219,6 +219,15 @@ class RAGClient {
         return await this.request('/pdf/upload', options);
     }
 
+     async upload(file, options = {}) {
+        // Use the existing helper to create the FormData
+        const formData = this.createUploadFormData(file, options);
+
+        // Call your existing, grayed-out uploadDocument method
+        return await this.uploadDocument(formData);
+    }
+
+
     async bulkUploadDocuments(formData, onProgress = null) {
         const options = {
             method: 'POST',
