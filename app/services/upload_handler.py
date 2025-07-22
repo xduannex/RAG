@@ -132,7 +132,7 @@ class UploadHandler:
             result = {
                 'status': status,
                 'messages': messages,
-                'file_path': metadata['file_path'],
+                'file_path': metadata.get('file_path', file_path),
                 'metadata': metadata,
                 'chunks': chunks,
                 'display_name': self.processor.get_display_name(metadata),

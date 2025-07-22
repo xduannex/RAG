@@ -49,21 +49,27 @@ def save_document_to_database(db: Session, result: dict, category: Optional[str]
                               description: Optional[str] = None) -> Document:
     """Save processed document to database"""
     try:
-        metadata = result['metadata']
+        metadata = result.get('metadata', {})
 
-        # Create document record
+        # Get all fields safely with fallbacks
+        file_path = metadata.get('file_path') or result.get('file_path', '')
+        file_type = metadata.get('file_type', '')
+        file_size = metadata.get('file_size', 0)
+        file_hash = metadata.get('file_hash', '')
+
+        # Create document record with safe access
         document = Document(
-            filename=os.path.basename(metadata['file_path']),
+            filename=os.path.basename(file_path) if file_path else '',
             original_filename=metadata.get('original_filename', ''),
-            file_path=metadata['file_path'],
-            file_type=metadata['file_type'],
-            file_size=metadata['file_size'],
-            file_hash=metadata['file_hash'],
+            file_path=file_path,
+            file_type=file_type,
+            file_size=file_size,
+            file_hash=file_hash,
             category=category,
             description=description,
-            title=metadata.get('extracted_title') or result['display_name'],
+            title=metadata.get('extracted_title') or result.get('display_name', ''),
             total_pages=metadata.get('total_pages', 0),
-            total_chunks=len(result['chunks']),
+            total_chunks=len(result.get('chunks', [])),
             word_count=metadata.get('word_count', 0),
             status="uploaded",
             processing_status="pending"
@@ -73,7 +79,7 @@ def save_document_to_database(db: Session, result: dict, category: Optional[str]
         db.commit()
         db.refresh(document)
 
-        logger.info(f"Document saved to database: ID {document.id}, Display: {result['display_name']}")
+        logger.info(f"Document saved to database: ID {document.id}, Display: {result.get('display_name', 'Unknown')}")
         return document
 
     except Exception as e:

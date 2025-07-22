@@ -484,116 +484,84 @@
                     <button class="btn btn-sm btn-outline" id="backToDocumentList" onclick="returnToDocumentList()" title="Back to Document List" style="display: none;">
                     <i class="fas fa-arrow-left"></i> Back to List
                 </button>
-                    <button class="btn btn-sm btn-outline" id="modalDownloadBtn" onclick="window.downloadDocument()" title="Download">
-                        <i class="fas fa-download"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline" id="viewChunksBtn" title="View Chunks">
-                        <i class="fas fa-list"></i>
-                    </button>
-                    <span class="close" id="closeDocumentViewer">&times;</span>
-                </div>
+                <button class="btn btn-sm btn-outline" id="modalDownloadBtn" onclick="window.downloadDocument()" title="Download">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button class="btn btn-sm btn-outline" id="viewChunksBtn" title="View Chunks">
+                    <i class="fas fa-list"></i>
+                </button>
+                <span class="close" id="closeDocumentViewer">&times;</span>
             </div>
-            <div class="modal-body">
-                <div id="documentViewerContent">
-                    <iframe id="documentViewerIframe"
-                            src=""
-                            width="100%"
-                            height="600px"
-                            frameborder="0"
-                            style="border: 1px solid #ddd; border-radius: 4px;">
-                    </iframe>
-
-                    <div id="documentImageContainer" style="display: none; text-align: center;">
-                        <img id="documentImage" src="" alt="Document" style="max-width: 100%; height: auto;">
-                    </div>
-
-                    <div id="documentTextContainer" style="display: none; padding: 20px; background: #f9f9f9; border-radius: 4px;">
-                        <pre id="documentText" style="white-space: pre-wrap; font-family: inherit;"></pre>
-                    </div>
-
-                    <div id="documentLoadingContainer" class="loading-container">
-                        <div class="loading-spinner"></div>
-                        <div class="loading-text">Loading document...</div>
-                    </div>
-
-                    <div id="documentErrorContainer" class="error-container" style="display: none;">
-                        <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
-                        <div class="error-text">Failed to load document</div>
-                        <button class="btn btn-sm btn-primary" onclick="retryLoadDocument()">
-                            <i class="fas fa-retry"></i> Retry
-                        </button>
-                    </div>
+        </div>
+        <div class="modal-body">
+            <div id="documentViewerContent">
+                <iframe id="documentViewerIframe" src="" width="100%" height="100%" frameborder="0"></iframe>
+                <div id="documentImageContainer" style="display: none; text-align: center;">
+                    <img id="documentImage" src="" alt="Document" style="max-width: 100%; height: auto;">
+                </div>
+                <div id="documentTextContainer" style="display: none;">
+                    <pre id="documentText"></pre>
+                </div>
+                <div id="documentLoadingContainer" class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading document...</div>
+                </div>
+                <div id="documentErrorContainer" class="error-container" style="display: none;">
+                    <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+                    <div class="error-text">Failed to load document</div>
+                    <button class="btn btn-sm btn-primary" onclick="retryLoadDocument()">
+                        <i class="fas fa-retry"></i> Retry
+                    </button>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
 
     <!-- Document List Modal -->
 <div id="documentListModal" class="modal">
     <div class="modal-content modal-large">
         <div class="modal-header">
-            <h3 id="documentListTitle">Document Library</h3>
+            <h3 class="modal-title">All Documents</h3>
             <div class="modal-actions">
-                <button class="btn btn-sm btn-outline" onclick="refreshDocumentList()" title="Refresh">
+                <div class="search-wrapper">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="documentSearchInput" class="form-control" placeholder="Search documents...">
+                </div>
+                <button class="btn btn-sm btn-outline" onclick="refreshDocumentList()" title="Refresh List">
                     <i class="fas fa-sync"></i>
                 </button>
                 <span class="close" id="closeDocumentList">&times;</span>
             </div>
         </div>
         <div class="modal-body">
-            <!-- Search Bar -->
-            <div class="document-list-search">
-                <div class="input-wrapper">
-                    <input type="text"
-                           class="form-control"
-                           id="documentSearchInput"
-                           placeholder="Search documents by name or category..."
-                           style="margin-bottom: 20px;">
-                    <div class="input-actions">
-                        <button type="button" class="btn btn-ghost btn-sm" onclick="clearDocumentSearch()" title="Clear Search">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Document List Container -->
-            <div id="documentListContent">
-                <div id="documentListLoading" class="loading-container">
+            <div id="documentListContainer">
+                <div id="documentListLoading" class="loading-container" style="display: none;">
                     <div class="loading-spinner"></div>
                     <div class="loading-text">Loading documents...</div>
                 </div>
-
                 <div id="documentListError" class="error-container" style="display: none;">
                     <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
-                    <div class="error-text">Failed to load documents</div>
-                    <button class="btn btn-sm btn-primary" onclick="loadDocumentList()">
-                        <i class="fas fa-retry"></i> Retry
-                    </button>
+                    <div class="error-text">Failed to load documents.</div>
                 </div>
-
-                <div id="documentListTable" style="display: none;">
-                    <table class="document-table">
-                        <thead>
-                            <tr>
-                                <th>Document Name</th>
-                                <th>Category</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="documentListTableBody">
-                            <!-- Documents will be populated here -->
-                        </tbody>
-                    </table>
-                </div>
-
                 <div id="documentListEmpty" style="display: none; text-align: center; padding: 40px;">
-                    <div class="empty-state">
-                        <i class="fas fa-file-alt" style="font-size: 48px; color: #ccc; margin-bottom: 20px;"></i>
-                        <h4>No Documents Found</h4>
-                        <p>No documents match your search criteria.</p>
-                    </div>
+                    <i class="fas fa-file-alt fa-3x text-muted"></i>
+                    <p>No documents found.</p>
                 </div>
+                <div class="table-responsive">
+    <table id="documentListTable" class="table" style="display: none;">
+        <thead>
+            <!-- This will be replaced by JS, but we can simplify it here -->
+            <tr>
+                <th>Document</th>
+            </tr>
+        </thead>
+        <tbody id="documentListTableBody">
+            <!-- Rows will be inserted here by JavaScript -->
+        </tbody>
+    </table>
+</div>
             </div>
         </div>
     </div>

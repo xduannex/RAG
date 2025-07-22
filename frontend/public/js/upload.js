@@ -3,12 +3,11 @@
 
 class UploadManager {
     constructor(ragClient) {
-        this.ragClient = ragClient || window.ragClient;
+        this.ragClient = ragClient; // Directly assign the client
         this.isUploading = false;
 
-        console.log('UploadManager initialized');
-        // Defer initialization until DOM is loaded to ensure all elements are available
-        document.addEventListener('DOMContentLoaded', () => this.init());
+        // The init call is now safely handled by the DOMContentLoaded listener below
+        this.init();
     }
 
     init() {
@@ -91,12 +90,10 @@ class UploadManager {
         const files = Array.from(fileList);
         if (files.length === 0) return;
 
-        // Update the file input so the form knows about the dropped/selected files
         const dataTransfer = new DataTransfer();
         files.forEach(file => dataTransfer.items.add(file));
         this.fileInput.files = dataTransfer.files;
 
-        // Update UI to show selected files
         if (this.uploadAreaText) {
             if (files.length === 1) {
                 this.uploadAreaText.textContent = `File selected: ${files[0].name}`;
@@ -133,15 +130,14 @@ class UploadManager {
                 category: this.categoryInput?.value || ''
             };
 
-            // Simplified: Upload files one by one for clearer progress and error handling
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const progress = Math.round(((i) / files.length) * 100);
                 this.updateProgress(progress, `Uploading ${i + 1}/${files.length}: ${file.name}...`);
 
+                // This is where the error occurred. Now this.ragClient is guaranteed to exist.
                 const result = await this.ragClient.upload(file, options);
                 if (!result.success) {
-                    // Stop on the first error to provide clear feedback
                     throw new Error(result.error || `Failed to upload ${file.name}`);
                 }
             }
@@ -150,7 +146,6 @@ class UploadManager {
             if (this.progressBar) this.progressBar.classList.add('bg-success');
             this.showNotification(`Upload complete: ${files.length} file(s) processed.`, 'success');
 
-            // Refresh documents list and stats in the UI
             if (window.documentsManager?.loadDocuments) window.documentsManager.loadDocuments();
             if (window.loadStats) window.loadStats();
 
@@ -160,10 +155,8 @@ class UploadManager {
             if (this.progressBar) this.progressBar.classList.add('bg-danger');
             this.showNotification(`Upload failed: ${error.message}`, 'error');
         } finally {
-            // CRITICAL FIX: Always reset the uploading state to prevent the UI from hanging
             this.isUploading = false;
             this.resetForm();
-            // Hide progress bar after a delay to allow user to see the final status
             setTimeout(() => this.hideProgress(), 5000);
         }
     }
@@ -193,19 +186,23 @@ class UploadManager {
     }
 
     showNotification(message, type = 'info') {
-        // Assumes a global showStatus or similar function exists (from a notifications.js file)
         if (window.showStatus) {
             window.showStatus(message, type);
         } else {
-            // Fallback if the notification system isn't available
             console.log(`[${type.toUpperCase()}] ${message}`);
             if (type === 'error') alert(`ERROR: ${message}`);
         }
     }
 }
 
-// Global instance initialization, ensuring it only runs once
-if (!window.uploadManager) {
-    // The constructor now handles waiting for DOMContentLoaded
-    window.uploadManager = new UploadManager(window.ragClient);
-}
+// CRITICAL FIX: Wrap initialization in a DOMContentLoaded listener.
+// This ensures that this code runs only after ragClient.js has created window.ragClient.
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.ragClient) {
+        if (!window.uploadManager) {
+            window.uploadManager = new UploadManager(window.ragClient);
+        }
+    } else {
+        console.error('RAG Client not found. UploadManager could not be initialized.');
+    }
+});

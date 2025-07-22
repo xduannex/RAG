@@ -133,33 +133,44 @@ retryInitialization() {
     this.updateStatsDisplay();
 }
 
-    updateStatsDisplay() {
-    // Update basic stats
-    if (this.totalDocsElement) {
-        this.totalDocsElement.textContent = this.formatNumber(this.stats.totalDocs);
-
-        // Make it clickable and add cursor pointer style
-        this.totalDocsElement.style.cursor = 'pointer';
-        this.totalDocsElement.style.color = '#3498db';
-        this.totalDocsElement.title = 'Click to view all documents';
-
-        // Remove existing listener if any
-        this.totalDocsElement.replaceWith(this.totalDocsElement.cloneNode(true));
-        // Get the new element reference
-        this.totalDocsElement = document.getElementById('totalDocs');
-
-        // Add click listener
+     updateStatsDisplay() {
+        // Update basic stats
         if (this.totalDocsElement) {
-            this.totalDocsElement.addEventListener('click', () => {
-                this.openDocumentList();
-            });
+            this.totalDocsElement.textContent = this.formatNumber(this.stats.totalDocs);
+
+            // Make it clickable and add cursor pointer style
+            this.totalDocsElement.style.cursor = 'pointer';
+            this.totalDocsElement.style.color = '#3498db';
+            this.totalDocsElement.title = 'Click to view all documents';
+
+            // Use a clean event listener to prevent duplicates
+            this.totalDocsElement.onclick = () => this.openDocumentList();
         }
+
+        if (this.totalSearchesElement) {
+            this.totalSearchesElement.textContent = this.formatNumber(this.stats.totalSearches);
+        }
+        if (this.completedDocsElement) {
+            this.completedDocsElement.textContent = this.formatNumber(this.stats.completedDocs);
+        }
+        if (this.processingDocsElement) {
+            this.processingDocsElement.textContent = this.formatNumber(this.stats.processingDocs);
+        }
+        if (this.failedDocsElement) {
+            this.failedDocsElement.textContent = this.formatNumber(this.stats.failedDocs);
+        }
+        if (this.storageUsedElement) {
+            this.storageUsedElement.textContent = this.formatFileSize(this.stats.totalStorage);
+        }
+        if (this.lastUpdatedElement) {
+            this.lastUpdatedElement.textContent = this.formatTime(new Date(this.stats.lastUpdated));
+        }
+
+        // Update progress bars and charts if they exist
+        this.updateProgressBars();
+        this.updateCharts();
     }
 
-    // Update progress bars and charts if they exist
-    this.updateProgressBars();
-    this.updateCharts();
-}
 
     updateProgressBars() {
         // Document processing progress
@@ -622,158 +633,100 @@ retryInitialization() {
     openDocumentList() {
         const modal = document.getElementById('documentListModal');
         if (modal) {
-            modal.style.display = 'block';
+            modal.style.display = 'flex'; // Use flex for centering
             this.loadDocumentList();
             this.setupDocumentListEventListeners();
         }
     }
 
+
     /**
      * Closes the document list modal
      */
     closeDocumentList() {
-    const modal = document.getElementById('documentListModal');
-    if (modal) {
-        modal.style.display = 'none';
-        this.clearDocumentSearch();
-        console.log('Document list modal closed');
+        const modal = document.getElementById('documentListModal');
+        if (modal) {
+            modal.style.display = 'none';
+            this.clearDocumentSearch();
+            console.log('Document list modal closed');
+        }
     }
-}
 
     /**
      * Loads the list of documents from the API
      */
-    async loadDocumentList() {
-    const loadingEl = document.getElementById('documentListLoading');
-    const errorEl = document.getElementById('documentListError');
-    const tableEl = document.getElementById('documentListTable');
-    const emptyEl = document.getElementById('documentListEmpty');
+   async loadDocumentList() {
+        const loadingEl = document.getElementById('documentListLoading');
+        const errorEl = document.getElementById('documentListError');
+        const tableEl = document.getElementById('documentListTable');
+        const emptyEl = document.getElementById('documentListEmpty');
 
-    // Show loading state
-    if (loadingEl) loadingEl.style.display = 'block';
-    if (errorEl) errorEl.style.display = 'none';
-    if (tableEl) tableEl.style.display = 'none';
-    if (emptyEl) emptyEl.style.display = 'none';
+        if (loadingEl) loadingEl.style.display = 'flex';
+        if (errorEl) errorEl.style.display = 'none';
+        if (tableEl) tableEl.style.display = 'none';
+        if (emptyEl) emptyEl.style.display = 'none';
 
-    try {
-        if (!this.ragClient) {
-            throw new Error('RAG Client not available');
-        }
+        try {
+            if (!this.ragClient) throw new Error('RAG Client not available');
 
-        console.log('Loading document list...');
-        const result = await this.ragClient.listDocuments();
+            const result = await this.ragClient.listDocuments();
 
-        console.log('Raw document list response:', result);
-
-        if (result.success) {
-            // Handle different possible response structures
-            let documents = [];
-
-            if (result.data) {
-                // Check if result.data is an array
-                if (Array.isArray(result.data)) {
-                    documents = result.data;
-                }
-                // Check if result.data has a documents property
-                else if (result.data.documents && Array.isArray(result.data.documents)) {
-                    documents = result.data.documents;
-                }
-                // Check if result.data has a files property
-                else if (result.data.files && Array.isArray(result.data.files)) {
-                    documents = result.data.files;
-                }
-                // Check if result.data has a pdfs property
-                else if (result.data.pdfs && Array.isArray(result.data.pdfs)) {
-                    documents = result.data.pdfs;
-                }
-                // If result.data is an object, wrap it in an array
-                else if (typeof result.data === 'object' && result.data !== null) {
-                    documents = [result.data];
-                }
+            if (result.success) {
+                const documents = result.data?.documents || result.data?.files || result.data || [];
+                this.renderDocumentList(documents);
+            } else {
+                throw new Error(result.error || 'Failed to load documents');
             }
-            // Check if result itself has documents
-            else if (result.documents && Array.isArray(result.documents)) {
-                documents = result.documents;
-            }
-            // Check if result itself is an array
-            else if (Array.isArray(result)) {
-                documents = result;
-            }
-
-            console.log('Processed documents array:', documents);
-            console.log('Number of documents:', documents.length);
-
-            this.renderDocumentList(documents);
-        } else {
-            throw new Error(result.error || 'Failed to load documents');
-        }
-
-    } catch (error) {
-        console.error('Error loading document list:', error);
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (errorEl) {
-            errorEl.style.display = 'block';
-            const errorText = errorEl.querySelector('.error-text');
-            if (errorText) {
-                errorText.textContent = `Failed to load documents: ${error.message}`;
+        } catch (error) {
+            console.error('Error loading document list:', error);
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (errorEl) {
+                errorEl.style.display = 'flex';
+                errorEl.querySelector('.error-text').textContent = `Failed to load documents: ${error.message}`;
             }
         }
     }
-}
 
     /**
      * Renders the document list in the table
      */
-    renderDocumentList(documents) {
-    const loadingEl = document.getElementById('documentListLoading');
-    const tableEl = document.getElementById('documentListTable');
-    const emptyEl = document.getElementById('documentListEmpty');
-    const tableBody = document.getElementById('documentListTableBody');
+      renderDocumentList(documents) {
+        const loadingEl = document.getElementById('documentListLoading');
+        const tableEl = document.getElementById('documentListTable');
+        const emptyEl = document.getElementById('documentListEmpty');
+        const tableBody = document.getElementById('documentListTableBody');
+        const tableHead = tableEl ? tableEl.querySelector('thead') : null;
 
-    if (loadingEl) loadingEl.style.display = 'none';
+        if (loadingEl) loadingEl.style.display = 'none';
 
-    console.log('Rendering document list:', documents);
-
-    // Ensure documents is an array
-    if (!Array.isArray(documents)) {
-        console.error('Documents is not an array:', documents);
-        if (emptyEl) {
-            emptyEl.style.display = 'block';
-            const emptyText = emptyEl.querySelector('p');
-            if (emptyText) {
-                emptyText.textContent = 'Error: Invalid document data format';
-            }
+        // NEW: Update the table header for the new single-column layout
+        if (tableHead) {
+            tableHead.innerHTML = `
+                <tr>
+                    <th>Document Details</th>
+                </tr>
+            `;
         }
-        return;
-    }
 
-    if (documents.length === 0) {
-        if (emptyEl) emptyEl.style.display = 'block';
-        return;
-    }
+        if (!Array.isArray(documents) || documents.length === 0) {
+            if (emptyEl) emptyEl.style.display = 'block';
+            if (tableEl) tableEl.style.display = 'none';
+            this.allDocuments = [];
+            return;
+        }
 
-    if (tableEl) tableEl.style.display = 'table';
+        if (tableEl) tableEl.style.display = 'table';
+        if (emptyEl) emptyEl.style.display = 'none';
 
-    if (tableBody) {
-        try {
+        if (tableBody) {
+            // Generate rows using the new compact structure
             tableBody.innerHTML = documents.map(doc => this.createDocumentRow(doc)).join('');
-            console.log('Document table rendered successfully');
-        } catch (mapError) {
-            console.error('Error mapping documents:', mapError);
-            if (emptyEl) {
-                emptyEl.style.display = 'block';
-                const emptyText = emptyEl.querySelector('p');
-                if (emptyText) {
-                    emptyText.textContent = 'Error rendering document list';
-                }
-            }
         }
+
+        this.allDocuments = documents;
+        this.filteredDocuments = documents;
     }
 
-    // Store documents for search functionality
-    this.allDocuments = documents;
-    this.filteredDocuments = documents;
-}
 
     /**
      * Creates a table row for a document
@@ -782,30 +735,50 @@ retryInitialization() {
         const docName = doc.title || doc.filename || doc.name || 'Unnamed Document';
         const category = doc.category || 'Uncategorized';
         const docId = doc.id || doc.document_id;
+        const escapedDocName = docName.replace(/'/g, "\\'");
 
+        // This new structure places everything inside a single <td>
+        // which will be styled with Flexbox.
         return `
             <tr data-doc-id="${docId}">
                 <td>
-                    <span class="document-name" onclick="viewDocument('${docId}', '${docName.replace(/'/g, "\\'")}')">
-                        ${docName}
-                    </span>
-                </td>
-                <td>
-                    <span class="document-category">${category}</span>
-                </td>
-                <td class="document-actions">
-                    <button class="btn btn-sm btn-outline" onclick="viewDocument('${docId}', '${docName.replace(/'/g, "\\'")}')">
-                        <i class="fas fa-eye"></i> View
-                    </button>
-                    <button class="btn btn-sm btn-outline" onclick="downloadDocument('${docId}', '${docName.replace(/'/g, "\\'")}')">
-                        <i class="fas fa-download"></i> Download
-                    </button>
-                    <button class="btn btn-sm btn-outline btn-danger" onclick="deleteDocument('${docId}', '${docName.replace(/'/g, "\\'")}')">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
+                    <div class="doc-info">
+                        <span class="document-name" onclick="viewDocument('${docId}', '${escapedDocName}')">
+                            ${escapeHtml(docName)}
+                        </span>
+                        <span class="document-category">${escapeHtml(category)}</span>
+                    </div>
+                    <div class="document-actions">
+                        <button class="btn btn-sm btn-outline" onclick="viewDocument('${docId}', '${escapedDocName}')" title="View">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline" onclick="downloadDocument('${docId}', '${escapedDocName}')" title="Download">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline btn-danger" onclick="deleteDocument('${docId}', '${escapedDocName}')" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
+    }
+
+    /**
+     * Filters documents based on search input
+     */
+    filterDocuments(searchTerm) {
+        if (!this.allDocuments) return;
+
+        const search = searchTerm.toLowerCase();
+        const filtered = this.allDocuments.filter(doc => {
+            const docName = (doc.title || doc.filename || doc.name || '').toLowerCase();
+            const category = (doc.category || '').toLowerCase();
+            return docName.includes(search) || category.includes(search);
+        });
+
+        this.filteredDocuments = filtered;
+        this.renderDocumentList(filtered);
     }
 
     /**
@@ -1064,51 +1037,24 @@ window.loadDocumentList = function() {
 window.viewDocument = function(docId, docName) {
     console.log('Opening document viewer for:', docName, 'ID:', docId);
 
-    // Store reference to return to document list if needed
+    // Close the document list modal first
     if (window.statsManager) {
-        window.statsManager.previousModal = 'documentList';
-    }
-
-    // Close the document list modal
-    if (window.statsManager && window.statsManager.closeDocumentList) {
         window.statsManager.closeDocumentList();
     }
 
-    // Show the back button
+    // Show the back button after a short delay
     setTimeout(() => {
         const backBtn = document.getElementById('backToDocumentList');
-        if (backBtn) {
-            backBtn.style.display = 'inline-block';
-            console.log('Back button should now be visible');
-        } else {
-            console.error('Back button element not found!');
-        }
-    }, 100);
-
-    // Open document viewer after a brief delay for smooth transition
-    setTimeout(() => {
-        // Try different possible function names for your document viewer
-        if (window.openDocumentViewer) {
-            window.openDocumentViewer(docId);
-        } else if (window.showDocumentViewer) {
-            window.showDocumentViewer(docId);
-        } else if (window.viewPDF) {
-            window.viewPDF(docId);
-        } else if (window.openDocument) {
-            window.openDocument(docId);
-        } else {
-            // If no viewer function found, show error
-            console.error('Document viewer function not found');
-            if (window.showStatus) {
-                window.showStatus('Document viewer not available', 'error');
-            }
-
-            // Reopen document list modal since viewer failed
-            if (window.statsManager && window.statsManager.openDocumentList) {
-                window.statsManager.openDocumentList();
-            }
-        }
+        if (backBtn) backBtn.style.display = 'inline-block';
     }, 150);
+
+    // Open the actual document viewer (this function should exist in documents.js or app.js)
+    if (window.openDocumentViewer) {
+        window.openDocumentViewer(docId, docName);
+    } else {
+        console.error('Document viewer function (openDocumentViewer) not found.');
+        if (window.showStatus) showStatus('Document viewer is not available.', 'error');
+    }
 };
 
 
