@@ -2,6 +2,7 @@ import os
 import logging
 import hashlib
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 import mimetypes
@@ -16,7 +17,7 @@ import pytesseract
 logger = logging.getLogger(__name__)
 
 pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesseract.exe'
-
+LIBREOFFICE_PATH = 'C:/Program Files/LibreOffice/program/soffice.exe'
 
 class DocumentProcessor:
     """Universal document processor supporting multiple file types including Excel"""
@@ -169,6 +170,47 @@ class DocumentProcessor:
                 shutil.move(temp_path, file_path)
             raise e
 
+    def _convert_image_to_pdf(self, input_path: str, output_path: str) -> bool:
+        """Convert image to PDF"""
+        try:
+            from PIL import Image
+            from reportlab.lib.pagesizes import letter
+            from reportlab.pdfgen import canvas
+
+            # Open the image
+            img = Image.open(input_path)
+
+            # Get image dimensions
+            width, height = img.size
+
+            # Calculate aspect ratio
+            aspect = width / height
+
+            # Set PDF dimensions (fit within letter size)
+            pdf_width, pdf_height = letter
+            if aspect > 1:  # Landscape
+                pdf_height = pdf_width / aspect
+            else:  # Portrait
+                pdf_width = pdf_height * aspect
+
+            # Create PDF
+            c = canvas.Canvas(output_path, pagesize=(pdf_width, pdf_height))
+
+            # Add image to PDF
+            c.drawImage(input_path, 0, 0, width=pdf_width, height=pdf_height)
+
+            # Save PDF
+            c.save()
+
+            return os.path.exists(output_path)
+
+        except ImportError:
+            logger.error("reportlab or Pillow not installed. Install with: pip install reportlab Pillow")
+            return False
+        except Exception as e:
+            logger.error(f"Image to PDF conversion failed: {e}")
+            return False
+
     def can_convert_to_pdf(self, file_type: str) -> bool:
         """Check if file type can be converted to PDF"""
         convertible_types = ['docx', 'doc', 'xlsx', 'xlsm', 'xls', 'pptx', 'ppt', 'txt', 'rtf']
@@ -178,6 +220,10 @@ class DocumentProcessor:
         """Convert document to PDF for viewing purposes only"""
         try:
             file_type = self.get_file_type(file_path)
+
+            # If it's already a PDF, just return the path
+            if file_type.lower() == 'pdf':
+                return file_path
 
             if not self.can_convert_to_pdf(file_type):
                 raise ValueError(f"Cannot convert {file_type} to PDF")
@@ -211,6 +257,8 @@ class DocumentProcessor:
                 success = self._convert_powerpoint_to_pdf(file_path, pdf_path)
             elif file_type.lower() == 'txt':
                 success = self._convert_text_to_pdf(file_path, pdf_path)
+            elif file_type.lower() in ['jpg', 'jpeg', 'png', 'bmp', 'tiff', 'gif']:
+                success = self._convert_image_to_pdf(file_path, pdf_path)
             else:
                 raise ValueError(f"No converter available for {file_type}")
 
@@ -239,8 +287,9 @@ class DocumentProcessor:
 
             # Method 2: Try using LibreOffice (cross-platform)
             try:
+                # Use the configured LibreOffice path
                 result = subprocess.run([
-                    'libreoffice', '--headless', '--convert-to', 'pdf',
+                    LIBREOFFICE_PATH, '--headless', '--convert-to', 'pdf',
                     '--outdir', os.path.dirname(output_path), input_path
                 ], capture_output=True, text=True, timeout=60)
 
@@ -269,8 +318,9 @@ class DocumentProcessor:
         try:
             # Try LibreOffice first
             try:
+                # Use the configured LibreOffice path
                 result = subprocess.run([
-                    'libreoffice', '--headless', '--convert-to', 'pdf',
+                    LIBREOFFICE_PATH, '--headless', '--convert-to', 'pdf',
                     '--outdir', os.path.dirname(output_path), input_path
                 ], capture_output=True, text=True, timeout=60)
 
@@ -298,8 +348,9 @@ class DocumentProcessor:
         try:
             # Try LibreOffice first
             try:
+                # Use the configured LibreOffice path
                 result = subprocess.run([
-                    'libreoffice', '--headless', '--convert-to', 'pdf',
+                    LIBREOFFICE_PATH, '--headless', '--convert-to', 'pdf',
                     '--outdir', os.path.dirname(output_path), input_path
                 ], capture_output=True, text=True, timeout=60)
 
@@ -916,52 +967,110 @@ class DocumentProcessor:
             logger.error(f"Error getting display name: {e}")
             return 'Untitled Document'
 
-    def _process_pdf(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
-        """Process PDF files"""
+    def _process_pdf(self, file_path: str) -> tuple:
+        """Process PDF files with OCR fallback using PyMuPDF"""
         try:
-            import PyPDF2
+            import fitz  # PyMuPDF
+            import pytesseract
+            from PIL import Image
+            import io
+            import numpy as np
 
+            # Initialize variables
             text = ""
-            metadata = {}
+            metadata = {
+                "file_type": "pdf",
+                "source": file_path,
+                "ocr_used": False
+            }
 
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+            # Open the PDF
+            pdf_document = fitz.open(file_path)
+            metadata["total_pages"] = len(pdf_document)
 
-                # Extract metadata
-                if pdf_reader.metadata:
-                    metadata.update({
-                        "title": pdf_reader.metadata.get('/Title', ''),
-                        "author": pdf_reader.metadata.get('/Author', ''),
-                        "subject": pdf_reader.metadata.get('/Subject', ''),
-                        "creator": pdf_reader.metadata.get('/Creator', ''),
-                        "producer": pdf_reader.metadata.get('/Producer', ''),
-                        "creation_date": str(pdf_reader.metadata.get('/CreationDate', '')),
-                        "modification_date": str(pdf_reader.metadata.get('/ModDate', ''))
-                    })
+            # Extract document metadata
+            pdf_metadata = pdf_document.metadata
+            if pdf_metadata:
+                metadata.update({
+                    "title": pdf_metadata.get("title", ""),
+                    "author": pdf_metadata.get("author", ""),
+                    "subject": pdf_metadata.get("subject", ""),
+                    "creator": pdf_metadata.get("creator", ""),
+                    "producer": pdf_metadata.get("producer", ""),
+                    "keywords": pdf_metadata.get("keywords", "")
+                })
 
-                metadata["total_pages"] = len(pdf_reader.pages)
+            # Extract text from all pages
+            for page_num, page in enumerate(pdf_document):
+                page_text = page.get_text()
 
-                # Extract text from all pages
-                for page_num, page in enumerate(pdf_reader.pages):
-                    try:
-                        page_text = page.extract_text()
-                        if page_text:
-                            text += f"\n[Page {page_num + 1}]\n{page_text}\n"
-                    except Exception as e:
-                        logger.warning(f"Could not extract text from page {page_num + 1}: {e}")
+                # If page has text, add it
+                if page_text.strip():
+                    text += f"\n[Page {page_num + 1}]\n{page_text}\n"
+
+            # Check if we need OCR (little or no text extracted)
+            if not text.strip() or len(text.strip()) < 100:
+                logger.info(f"PDF has little or no text content. Attempting OCR: {file_path}")
+
+                ocr_text = ""
+                for page_num, page in enumerate(pdf_document):
+                    logger.info(f"Performing OCR on page {page_num + 1}...")
+
+                    # Render page to an image (no external dependencies needed)
+                    pix = page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72))  # 300 DPI
+
+                    # Convert to PIL Image
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+                    # Perform OCR
+                    page_text = pytesseract.image_to_string(img, lang='eng')
+
+                    # Only add non-empty text
+                    if page_text.strip():
+                        ocr_text += f"\n[Page {page_num + 1} (OCR)]\n{page_text}\n"
+                        logger.info(f"OCR page {page_num + 1} extracted {len(page_text)} characters")
+
+                # If OCR extracted text, use it
+                if ocr_text and ocr_text.strip():
+                    logger.info(f"OCR successfully extracted {len(ocr_text)} characters")
+                    text = ocr_text
+                    metadata["ocr_used"] = True
+                else:
+                    logger.error(f"OCR failed to extract text from PDF {file_path}")
+
+            # Close the document
+            pdf_document.close()
+
+            # Final check for content
+            if not text.strip():
+                raise ValueError("No text content extracted from document")
+
+            # Calculate word count
+            words = text.split()
+            metadata['word_count'] = len(words)
 
             return text.strip(), metadata
 
-        except ImportError:
-            raise ImportError("PyPDF2 is required for PDF processing. Install with: pip install PyPDF2")
+        except ImportError as ie:
+            if "fitz" in str(ie):
+                raise ImportError("PyMuPDF is required for PDF processing. Install with: pip install pymupdf")
+            elif "pytesseract" in str(ie):
+                raise ImportError("pytesseract is required for OCR. Install with: pip install pytesseract")
+            else:
+                raise
         except Exception as e:
-            logger.error(f"Error processing PDF: {e}")
+            logger.error(f"Error processing PDF: {e}", exc_info=True)
             raise
 
     def _process_docx(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
-        """Process DOCX files"""
+        """Process DOCX files with OCR fallback for image-only documents"""
         try:
             from docx import Document
+            import fitz  # PyMuPDF
+            import pytesseract
+            from PIL import Image
+            import io
+            import numpy as np
 
             doc = Document(file_path)
 
@@ -984,6 +1093,107 @@ class DocumentProcessor:
                 "paragraph_count": paragraph_count
             }
 
+            # Check if we need OCR (little or no text extracted)
+            if not text.strip() or len(text.strip()) < 100:
+                logger.info(f"Word document has little or no text content. Attempting OCR: {file_path}")
+
+                # First try: Convert to PDF and then use OCR
+                with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_pdf:
+                    temp_pdf_path = temp_pdf.name
+
+                # Try to convert to PDF
+                pdf_conversion_success = self._convert_word_to_pdf(file_path, temp_pdf_path)
+
+                if pdf_conversion_success and os.path.exists(temp_pdf_path):
+                    try:
+                        # Use the PDF OCR approach
+                        pdf_document = fitz.open(temp_pdf_path)
+                        ocr_text = ""
+
+                        for page_num, page in enumerate(pdf_document):
+                            logger.info(f"Performing OCR on page {page_num + 1}...")
+
+                            # Render page to an image
+                            pix = page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72))  # 300 DPI
+
+                            # Convert to PIL Image
+                            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+                            # Perform OCR
+                            page_text = pytesseract.image_to_string(img, lang='eng')
+
+                            # Only add non-empty text
+                            if page_text.strip():
+                                ocr_text += f"\n[Page {page_num + 1} (OCR)]\n{page_text}\n"
+                                logger.info(f"OCR page {page_num + 1} extracted {len(page_text)} characters")
+
+                        # Close the PDF
+                        pdf_document.close()
+
+                        # If OCR extracted text, use it
+                        if ocr_text and ocr_text.strip():
+                            logger.info(f"OCR successfully extracted {len(ocr_text)} characters from Word document")
+                            text = ocr_text
+                            metadata["ocr_used"] = True
+
+                    except Exception as e:
+                        logger.warning(f"PDF-based OCR failed: {e}, trying direct image extraction")
+
+                # Second try: If PDF approach failed, try to extract images directly from the Word document
+                if not text.strip() or len(text.strip()) < 100:
+                    try:
+                        ocr_text = ""
+                        image_count = 0
+
+                        # Extract images from document
+                        for rel in doc.part.rels.values():
+                            if "image" in rel.target_ref:
+                                try:
+                                    image_count += 1
+                                    logger.info(f"Processing image {image_count} from Word document")
+
+                                    # Get the image data
+                                    image_part = rel.target_part
+                                    image_bytes = image_part.blob
+
+                                    # Convert to PIL Image
+                                    img = Image.open(io.BytesIO(image_bytes))
+
+                                    # Perform OCR
+                                    img_text = pytesseract.image_to_string(img, lang='eng')
+
+                                    if img_text.strip():
+                                        ocr_text += f"\n[Image {image_count} (OCR)]\n{img_text}\n"
+                                        logger.info(f"OCR image {image_count} extracted {len(img_text)} characters")
+                                except Exception as img_e:
+                                    logger.warning(f"Error processing image {image_count}: {img_e}")
+
+                        # If OCR extracted text, use it
+                        if ocr_text and ocr_text.strip():
+                            logger.info(f"Direct image OCR successfully extracted {len(ocr_text)} characters")
+                            text = ocr_text
+                            metadata["ocr_used"] = True
+                            metadata["images_processed"] = image_count
+
+                    except Exception as e:
+                        logger.warning(f"Direct image extraction failed: {e}")
+
+                # Clean up temporary PDF file
+                try:
+                    if os.path.exists(temp_pdf_path):
+                        os.unlink(temp_pdf_path)
+                except Exception as e:
+                    logger.warning(f"Error removing temporary PDF: {e}")
+
+            # Final check for content
+            if not text.strip():
+                logger.warning("No text content extracted from Word document, even after OCR attempts")
+                text = "[Document appears to contain no extractable text or images]"
+
+            # Calculate word count
+            words = text.split()
+            metadata['word_count'] = len(words)
+
             return text.strip(), metadata
 
         except ImportError:
@@ -994,136 +1204,219 @@ class DocumentProcessor:
             raise
 
     def _process_doc(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
-        """Process DOC files (legacy Word format)"""
+        """
+        Process DOC files (legacy Word format) with a robust, streamlined approach.
+        This method prioritizes reliable conversion to PDF and then intelligently
+        chooses between text extraction and OCR.
+        """
+        # Initialize variables
+        text = ""
+        metadata = {
+            "format": "doc",
+            "ocr_used": False,
+            "extraction_method": "unknown"
+        }
 
-        # Method 1: Try using textract with antiword
+        # --- Method 1: Try textract first (fast for simple text) ---
         try:
             import textract
-            text = textract.process(file_path).decode('utf-8')
-
-            metadata = {
-                "format": "doc",
-                "extracted_with": "textract"
-            }
-            return text.strip(), metadata
-
-        except ImportError:
-            logger.warning("textract not available for DOC processing")
+            # Use errors='ignore' for robustness with legacy encodings
+            raw_text = textract.process(file_path)
+            text = raw_text.decode('utf-8', errors='ignore')
+            if text.strip():
+                metadata["extraction_method"] = "textract"
+                logger.info(f"Successfully extracted text from DOC using textract: {file_path}")
         except Exception as e:
-            logger.warning(f"textract failed for DOC processing: {e}")
+            logger.warning(f"textract failed for DOC processing, will try other methods: {e}")
 
-        # Method 2: Try using LibreOffice headless conversion
-        try:
-            # Convert DOC to TXT using LibreOffice
+        # --- Method 2: Unified LibreOffice -> PDF -> Text/OCR Extraction ---
+        # This is the primary method for complex or image-based .doc files.
+        if not text.strip():
+            logger.info(f"Trying LibreOffice PDF conversion for: {file_path}")
             temp_dir = tempfile.mkdtemp()
             try:
-                result = subprocess.run([
-                    'libreoffice', '--headless', '--convert-to', 'txt',
-                    '--outdir', temp_dir, file_path
-                ], capture_output=True, text=True, timeout=60)
+                pdf_path = os.path.join(temp_dir, f"{Path(file_path).stem}.pdf")
 
-                if result.returncode == 0:
-                    # Find the converted txt file
-                    base_name = os.path.splitext(os.path.basename(file_path))[0]
-                    txt_file = os.path.join(temp_dir, f"{base_name}.txt")
+                # Step 2a: Convert DOC to PDF using LibreOffice
+                pdf_conversion_success = False
+                try:
+                    libreoffice_path = self._find_libreoffice_path()
+                    result = subprocess.run(
+                        [libreoffice_path, '--headless', '--convert-to', 'pdf', '--outdir', temp_dir, file_path],
+                        capture_output=True, text=True, timeout=180
+                    )
+                    if result.returncode == 0 and os.path.exists(pdf_path):
+                        pdf_conversion_success = True
+                    else:
+                        logger.warning(
+                            f"LibreOffice DOC to PDF conversion failed. Return code: {result.returncode}. Stderr: {result.stderr.strip()}")
+                except FileNotFoundError:
+                    logger.warning("LibreOffice not found. Skipping PDF conversion method.")
+                except subprocess.TimeoutExpired:
+                    logger.warning("LibreOffice DOC to PDF conversion timed out after 180s.")
+                except Exception as e:
+                    logger.error(f"An unexpected error occurred during LibreOffice conversion: {e}")
 
-                    if os.path.exists(txt_file):
-                        with open(txt_file, 'r', encoding='utf-8') as f:
-                            text = f.read()
+                # Step 2b: Process the converted PDF
+                if pdf_conversion_success:
+                    metadata["extraction_method"] = "libreoffice_pdf"
+                    try:
+                        import fitz  # PyMuPDF
+                        pdf_document = fitz.open(pdf_path)
 
-                        metadata = {
-                            "format": "doc",
-                            "extracted_with": "libreoffice"
-                        }
-                        return text.strip(), metadata
+                        # Attempt to extract text directly from PDF
+                        pdf_text = "".join(page.get_text() for page in pdf_document)
+
+                        if len(pdf_text.strip()) > 10:  # Check for meaningful text
+                            logger.info("Extracted text directly from LibreOffice-converted PDF.")
+                            text = pdf_text
+                        else:
+                            # If no text, it's likely an image-based doc, so OCR
+                            logger.info("No text found in converted PDF, attempting OCR.")
+                            import pytesseract
+                            from PIL import Image
+
+                            ocr_text_parts = []
+                            for page_num, page in enumerate(pdf_document):
+                                logger.debug(f"Performing OCR on page {page_num + 1} of converted PDF...")
+                                pix = page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72))  # 300 DPI
+                                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                                page_ocr_text = pytesseract.image_to_string(img, lang='eng')
+                                if page_ocr_text.strip():
+                                    ocr_text_parts.append(f"\n[Page {page_num + 1} (OCR)]\n{page_ocr_text}")
+
+                            if ocr_text_parts:
+                                text = "\n".join(ocr_text_parts)
+                                metadata["ocr_used"] = True
+                                metadata["extraction_method"] = "libreoffice_pdf_ocr"
+                                logger.info(f"Successfully extracted {len(text)} chars via OCR from converted PDF.")
+
+                        pdf_document.close()
+                    except Exception as e:
+                        logger.error(f"Failed to process the converted PDF '{pdf_path}': {e}")
             finally:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.warning(f"LibreOffice conversion failed: {e}")
-        except Exception as e:
-            logger.warning(f"LibreOffice method failed: {e}")
-
-        # Method 3: Try using python-docx (limited compatibility with .doc)
-        try:
-            from docx import Document
-
-            # This might work for some .doc files that are actually .docx
-            doc = Document(file_path)
-            text = ""
-
-            for paragraph in doc.paragraphs:
-                if paragraph.text.strip():
-                    text += paragraph.text + "\n"
-
-            if text.strip():
-                metadata = {
-                    "format": "doc",
-                    "extracted_with": "python-docx",
-                    "note": "Limited compatibility - some formatting may be lost"
-                }
-                return text.strip(), metadata
-
-        except Exception as e:
-            logger.warning(f"python-docx method failed: {e}")
-
-            # Method 4: Try using win32com (Windows only)
-        if os.name == 'nt':  # Windows
+        # --- Method 3: Try using win32com (Windows only fallback) ---
+        if not text.strip() and os.name == 'nt':
+            logger.info(f"Trying win32com on Windows for: {file_path}")
             try:
                 import win32com.client
-
                 word = win32com.client.Dispatch("Word.Application")
                 word.Visible = False
-
                 try:
-                    doc = word.Documents.Open(file_path)
+                    doc = word.Documents.Open(os.path.abspath(file_path), ReadOnly=True)
                     text = doc.Content.Text
-                    doc.Close()
-
-                    metadata = {
-                        "format": "doc",
-                        "extracted_with": "win32com",
-                        "note": "Extracted using Microsoft Word COM interface"
-                    }
-                    return text.strip(), metadata
-
+                    if text.strip():
+                        metadata["extraction_method"] = "win32com"
+                        logger.info("Successfully extracted text using win32com.")
                 finally:
+                    if 'doc' in locals() and doc:
+                        doc.Close(False)
                     word.Quit()
-
             except ImportError:
-                logger.warning("pywin32 not available for DOC processing")
+                logger.warning("pywin32 not available, cannot use win32com method.")
             except Exception as e:
                 logger.warning(f"Win32COM method failed: {e}")
 
-            # Method 5: Last resort - try to read as RTF (some .doc files are RTF)
-        try:
-            from striprtf.striprtf import rtf_to_text
+        # --- Final Fallbacks (for edge cases like .doc that are actually .docx or .rtf) ---
+        if not text.strip():
+            logger.debug(f"Trying final fallback methods for {file_path}")
+            # Try python-docx
+            try:
+                from docx import Document
+                doc = Document(file_path)
+                doc_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                if doc_text.strip():
+                    text = doc_text
+                    metadata["extraction_method"] = "python-docx_fallback"
+                    logger.info("Processed .doc as a .docx file.")
+            except Exception:
+                pass  # Fails for true .doc, which is expected.
 
-            with open(file_path, 'r', encoding='latin-1', errors='ignore') as file:
-                content = file.read()
+        if not text.strip():
+            # Try striprtf
+            try:
+                from striprtf.striprtf import rtf_to_text
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    content = f.read()
+                if content.strip().startswith('{\\rtf'):
+                    rtf_text = rtf_to_text(content)
+                    if rtf_text.strip():
+                        text = rtf_text
+                        metadata["extraction_method"] = "striprtf_fallback"
+                        logger.info("Processed .doc as an RTF file.")
+            except Exception:
+                pass  # Fails for non-RTF, which is expected.
 
-            # Check if it might be RTF format
-            if content.startswith('{\\rtf'):
-                text = rtf_to_text(content)
+        # --- Final check and metadata update ---
+        if not text.strip():
+            logger.warning(f"All methods failed to extract text from DOC file: {file_path}")
+            text = "This document contains images or formatting that could not be extracted as text. Please view the original file."
+            metadata["extraction_failed"] = True
 
-                metadata = {
-                    "format": "doc",
-                    "extracted_with": "striprtf",
-                    "note": "Processed as RTF format"
-                }
-                return text.strip(), metadata
+        metadata.update({"word_count": len(text.split())})
+        return text.strip(), metadata
 
-        except Exception as e:
-            logger.warning(f"RTF fallback method failed: {e}")
+    def _find_libreoffice_path(self) -> str:
+        """Find the LibreOffice executable path"""
+        # Default path
+        libreoffice_path = 'libreoffice'
 
-            # If all methods fail, raise an informative error
-        raise ValueError(
-            f"Unable to process DOC file: {file_path}. "
-            "Please install one of the following:\n"
-            "1. LibreOffice (recommended): https://www.libreoffice.org/\n"
-            "2. pywin32 (Windows): pip install pywin32\n"
-            "3. textract with antiword: pip install textract (requires antiword installation)"
-        )
+        if os.name == 'nt':  # Windows
+            # Common installation paths on Windows
+            possible_paths = [
+                r'C:\Program Files\LibreOffice\program\soffice.exe',
+                r'C:\Program Files (x86)\LibreOffice\program\soffice.exe',
+                r'C:\Program Files\LibreOffice\program\soffice',
+            ]
+
+            # Check if any of these paths exist
+            for path in possible_paths:
+                if os.path.exists(path):
+                    logger.info(f"Found LibreOffice at: {path}")
+                    return path
+
+            # If not found in common locations, try to find it in Program Files
+            program_files = os.environ.get('PROGRAMFILES', 'C:\\Program Files')
+            program_files_x86 = os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)')
+
+            # Search in Program Files directories
+            for root_dir in [program_files, program_files_x86]:
+                for dirpath, dirnames, filenames in os.walk(root_dir):
+                    if 'soffice.exe' in filenames and 'LibreOffice' in dirpath:
+                        path = os.path.join(dirpath, 'soffice.exe')
+                        logger.info(f"Found LibreOffice at: {path}")
+                        return path
+
+        elif sys.platform == 'darwin':  # macOS
+            possible_paths = [
+                '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+                '/Applications/OpenOffice.app/Contents/MacOS/soffice',
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    return path
+
+        else:  # Linux and other Unix-like systems
+            # Try to find it in PATH
+            try:
+                result = subprocess.run(['which', 'libreoffice'],
+                                        capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip()
+
+                # Try soffice as well
+                result = subprocess.run(['which', 'soffice'],
+                                        capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip()
+            except:
+                pass
+
+        # If we get here, we couldn't find a specific path, return the default
+        logger.warning("Could not find specific LibreOffice path, using default 'libreoffice'")
+        return libreoffice_path
 
     def _process_xlsx(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
         """Process XLSX files (Excel 2007+)"""
@@ -3228,7 +3521,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 

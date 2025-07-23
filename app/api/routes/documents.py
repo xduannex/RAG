@@ -870,29 +870,29 @@ async def process_document_background(document_id: int):
             db.close()
 
     # Additional utility functions for document processing
-    def get_file_extension(filename: str) -> str:
-        """Get file extension from filename"""
-        return filename.lower().split('.')[-1] if '.' in filename else ''
+def get_file_extension(filename: str) -> str:
+    """Get file extension from filename"""
+    return filename.lower().split('.')[-1] if '.' in filename else ''
 
-    def generate_unique_filename(original_filename: str) -> str:
-        """Generate unique filename while preserving extension"""
-        import uuid
-        file_extension = get_file_extension(original_filename)
-        return f"{uuid.uuid4()}.{file_extension}"
+def generate_unique_filename(original_filename: str) -> str:
+    """Generate unique filename while preserving extension"""
+    import uuid
+    file_extension = get_file_extension(original_filename)
+    return f"{uuid.uuid4()}.{file_extension}"
 
-    def calculate_file_hash(file_path: str) -> str:
-        """Calculate SHA-256 hash of file"""
-        import hashlib
+def calculate_file_hash(file_path: str) -> str:
+    """Calculate SHA-256 hash of file"""
+    import hashlib
 
-        hash_sha256 = hashlib.sha256()
-        try:
-            with open(file_path, "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
-                    hash_sha256.update(chunk)
-            return hash_sha256.hexdigest()
-        except Exception as e:
-            logger.error(f"Error calculating file hash: {e}")
-            return ""
+    hash_sha256 = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
+    except Exception as e:
+        logger.error(f"Error calculating file hash: {e}")
+        return ""
 
     # Batch processing endpoints
 @router.post("/batch/upload")

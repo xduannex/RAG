@@ -130,12 +130,17 @@ class UploadManager {
                 category: this.categoryInput?.value || ''
             };
 
+            // Add this check to prevent the error
+            if (!this.ragClient) {
+                throw new Error("RAG Client is not initialized. Please refresh the page and try again.");
+            }
+
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const progress = Math.round(((i) / files.length) * 100);
                 this.updateProgress(progress, `Uploading ${i + 1}/${files.length}: ${file.name}...`);
 
-                // This is where the error occurred. Now this.ragClient is guaranteed to exist.
+                console.log(`Attempting to upload file: ${file.name} using ragClient:`, this.ragClient);
                 const result = await this.ragClient.upload(file, options);
                 if (!result.success) {
                     throw new Error(result.error || `Failed to upload ${file.name}`);
@@ -205,4 +210,5 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('RAG Client not found. UploadManager could not be initialized.');
     }
+    setTimeout(initializeUploadManager, 100);
 });
