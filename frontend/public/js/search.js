@@ -369,19 +369,30 @@ class SearchManager {
         }
     }
 
-    async performRAGQuery(question) {
+        async performRAGQuery(question) {
+        // Get RAG-specific configuration from the global object set by chat-panels.js
+        const ragConfig = window.ragConfig || {};
+
         const options = {
             max_results: this.getMaxResults(),
-            similarity_threshold: 0.7,
+            similarity_threshold: 0.7, // This could also be part of ragConfig
             include_sources: true,
-            ...this.getSearchFilters()
+
+            // --- Key Change: Use the category from the RAG advanced panel ---
+            // The 'category' key must match what the backend endpoint expects.
+            category: ragConfig.filterCategory || null,
+
+            // Pass along OpenAI settings as well
+            useOpenAI: ragConfig.useOpenAI || false,
+            // The ragClient will use these nested options if available
+            openAI: ragConfig.openAI || null
         };
 
-        // Check cache first
+        // Check cache first, now including the category in the key
         const cacheKey = `rag:${question}:${JSON.stringify(options)}`;
         const cachedResult = this.getFromCache(cacheKey);
         if (cachedResult) {
-            console.log('Using cached RAG result');
+            console.log('Using cached RAG result for category:', options.category);
             return cachedResult;
         }
 
@@ -395,6 +406,7 @@ class SearchManager {
         }
 
         try {
+            // The ragClient.ragQuery method will pass these options to the backend.
             const result = await this.ragClient.ragQuery(question, options);
 
             if (result.success) {
@@ -415,18 +427,24 @@ class SearchManager {
         }
     }
 
-    async performSearch(query) {
+        async performSearch(query) {
+        // Get search-specific configuration from the global object set by chat-panels.js
+        const searchConfig = (window.currentAdvancedSettings && window.currentAdvancedSettings.panel === 'search')
+            ? window.currentAdvancedSettings
+            : {};
+
         const options = {
             n_results: this.getMaxResults(),
-            similarity_threshold: 0.7,
-            ...this.getSearchFilters()
+            similarity_threshold: 0.7, // You can make this configurable
+            // --- Key Change: Use the category from the search advanced panel ---
+            category: searchConfig.category || null
         };
 
-        // Check cache first
+        // Check cache first, now including the category in the key
         const cacheKey = `search:${query}:${JSON.stringify(options)}`;
         const cachedResult = this.getFromCache(cacheKey);
         if (cachedResult) {
-            console.log('Using cached search result');
+            console.log('Using cached search result for category:', options.category);
             return cachedResult;
         }
 
@@ -440,6 +458,7 @@ class SearchManager {
         }
 
         try {
+            // The ragClient.search method will pass these options to the backend.
             const result = await this.ragClient.search(query, options);
 
             if (result.success) {

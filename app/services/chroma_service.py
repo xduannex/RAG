@@ -266,8 +266,7 @@ class ChromaService:
             self,
             query: str,
             n_results: int = 10,
-            pdf_ids: Optional[List[int]] = None,
-            category: Optional[str] = None,
+            where_filter: Optional[Dict[str, Any]] = None,  # <-- Changed from pdf_ids and category
             similarity_threshold: float = 0.0
     ) -> List[Dict[str, Any]]:
         """Search documents with enhanced filtering and error handling"""
@@ -283,14 +282,7 @@ class ChromaService:
                 logger.warning("Empty search query")
                 return []
 
-            logger.info(f"🔍 Searching ChromaDB: '{query}' (limit: {n_results})")
-
-            # Build where clause for filtering
-            where_clause = {}
-            if pdf_ids:
-                where_clause["pdf_id"] = {"$in": pdf_ids}
-            if category:
-                where_clause["category"] = category
+            logger.info(f"🔍 Searching ChromaDB: '{query}' (limit: {n_results}, filter: {where_filter})")
 
             # Perform search
             search_params = {
@@ -298,13 +290,14 @@ class ChromaService:
                 "n_results": min(n_results, 100)  # Limit to prevent memory issues
             }
 
-            if where_clause:
-                search_params["where"] = where_clause
+            # --- Key Change: Use the passed where_filter directly ---
+            if where_filter:
+                search_params["where"] = where_filter
 
             results = self.collection.query(**search_params)
 
             if not results or not results.get("documents") or not results["documents"][0]:
-                logger.info(f"No results found for query: '{query}'")
+                logger.info(f"No results found for query: '{query}' with filter: {where_filter}")
                 return []
 
             # Format results
@@ -316,19 +309,11 @@ class ChromaService:
 
             for i, (doc, metadata, distance, doc_id) in enumerate(zip(documents, metadatas, distances, ids)):
                 try:
-                    # Fix: ChromaDB uses cosine distance (0 to 2), not cosine similarity
                     # Convert cosine distance to similarity score
                     similarity_score = max(0.0, 1.0 - (distance / 2.0))
 
-                    # Alternative: Use inverse distance for ranking (higher distance = lower score)
-                    # similarity_score = 1.0 / (1.0 + distance)
-
-                    logger.info(f"🔍 Document {i + 1}: similarity={similarity_score:.4f}, distance={distance:.4f}")
-
-                    # Apply similarity threshold (you might want to lower this)
+                    # Apply similarity threshold
                     if similarity_score < similarity_threshold:
-                        logger.info(
-                            f"🔍 Document {i + 1} filtered out by similarity threshold ({similarity_score:.4f} < {similarity_threshold})")
                         continue
 
                     result = {
@@ -341,10 +326,13 @@ class ChromaService:
 
                     # Add metadata
                     if metadata:
+                        # Ensure backward compatibility for pdf_id while preferring document_id
+                        doc_id_from_meta = metadata.get("document_id") or metadata.get("pdf_id")
                         result.update({
-                            "document_id": metadata.get("pdf_id"),
-                            "pdf_id": metadata.get("pdf_id"),
+                            "document_id": doc_id_from_meta,
+                            "pdf_id": doc_id_from_meta,  # for older frontend code
                             "filename": metadata.get("filename", "Unknown"),
+                            "original_filename": metadata.get("original_filename", metadata.get("filename", "Unknown")),
                             "title": metadata.get("title", ""),
                             "category": metadata.get("category", ""),
                             "page_number": metadata.get("page_number"),
@@ -359,11 +347,11 @@ class ChromaService:
                     logger.warning(f"Error formatting result {i}: {e}")
                     continue
 
-            logger.info(f"✅ Found {len(formatted_results)} relevant results")
+            logger.info(f"✅ Found {len(formatted_results)} relevant results after filtering")
             return formatted_results
 
         except Exception as e:
-            logger.error(f"❌ ChromaDB search failed: {e}")
+            logger.error(f"❌ ChromaDB search failed: {e}", exc_info=True)
             return []
 
     async def delete_documents(self, pdf_id: int) -> bool:

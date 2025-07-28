@@ -1150,6 +1150,8 @@ async def view_document_as_pdf(document_id: int, db: Session = Depends(get_db)):
         logger.error(f"Error serving document as PDF {document_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to serve document as PDF: {str(e)}")
 
+
+
 @router.get("/{document_id}/content")
 async def get_document_content(document_id: int, db: Session = Depends(get_db)):
     """Get document content for viewing"""

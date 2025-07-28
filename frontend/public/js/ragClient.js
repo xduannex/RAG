@@ -317,41 +317,45 @@ class RAGClient {
     }
 
     async ragQuery(query, options = {}) {
-        try {
-            const payload = {
-                query: query,
-                max_results: options.max_results || options.n_results || 5,
-                similarity_threshold: options.similarity_threshold || 0.3,
-                model: options.model || 'qwen2.5:7b',
-                document_ids: options.document_ids || options.pdf_ids || null,
-                category: options.category || null,
-                include_context: options.include_context || false,
-                ...options
-            };
+    try {
+        const payload = {
+            query: query,
+            max_results: options.max_results || options.n_results || 5,
+            similarity_threshold: options.similarity_threshold || 0.3,
+            // The 'model' key is now passed via the spread operator below
+            // only if it exists in the 'options' object.
+            // This removes the hardcoded frontend default.
+            document_ids: options.document_ids || options.pdf_ids || null,
+            category: options.category || null,
+            include_context: options.include_context || false,
+            ...options // This will correctly include options.model if it's provided
+        };
 
-            // Remove null values
-            Object.keys(payload).forEach(key => {
-                if (payload[key] === null || payload[key] === undefined) {
-                    delete payload[key];
-                }
-            });
+        // Remove null or undefined values to keep the payload clean
+        Object.keys(payload).forEach(key => {
+            if (payload[key] === null || payload[key] === undefined) {
+                delete payload[key];
+            }
+        });
 
-            console.log('RAG Query payload:', payload);
+        console.log('RAG Query payload:', payload);
 
-            const response = await this.post('/search/rag', payload);
+        const response = await this.post('/search/rag', payload);
 
-            return {
-                success: true,
-                data: response
-            };
-        } catch (error) {
-            console.error('RAG query failed:', error);
-            return {
-                success: false,
-                error: error.message
-            };
-        }
+        return {
+            success: true,
+            data: response
+        };
+    } catch (error) {
+        console.error('RAG query failed:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
+}
+
+
 
     async semanticSearch(query, options = {}) {
         const payload = {
@@ -746,16 +750,15 @@ class RAGClient {
     }
 
     async searchByCategory(category, options = {}) {
-        const payload = {
-            category: category,
-            ...options
-        };
+    const params = new URLSearchParams({
+        category: category,
+        ...options
+    });
 
-        return await this.request('/search/category', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
-    }
+    return await this.request(`/search/category?${params.toString()}`, {
+        method: 'GET'
+    });
+}
 
     // Document analysis
     async analyzeDocument(documentId) {
@@ -967,6 +970,7 @@ function initializeRAGClient() {
 
     return window.ragClient;
 }
+
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {

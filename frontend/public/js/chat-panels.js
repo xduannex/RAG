@@ -167,6 +167,8 @@ function toggleAdvancedSearch(panelType) {
     }
 }
 
+
+
 // Toggle OpenAI settings visibility
 function toggleOpenAISettings() {
     const checkbox = document.getElementById('ragUseOpenAI')
@@ -682,31 +684,90 @@ function handleKeyboardShortcuts(event) {
 }
 
 // Load categories for both panels
-function loadCategoriesForPanels() {
-    // This would typically load from your backend
-    const categories = ['General', 'Technical', 'Legal', 'Financial', 'Medical']
+/**
+ * Load unique categories from the backend using RAGClient and populate both dropdowns
+ */
+async function loadCategoriesForPanels() {
+    const ragCategorySelect = document.getElementById('ragFilterCategory');
+    const searchCategorySelect = document.getElementById('searchFilterCategory');
 
-    const ragCategorySelect = document.getElementById('ragFilterCategory')
-    const searchCategorySelect = document.getElementById('searchFilterCategory')
-
-    ;[ragCategorySelect, searchCategorySelect].forEach(select => {
+    // Show loading state
+    [ragCategorySelect, searchCategorySelect].forEach(select => {
         if (select) {
-            // Clear existing options except first one
-            const firstOption = select.querySelector('option')
-            select.innerHTML = ''
-            if (firstOption) {
-                select.appendChild(firstOption)
-            }
-
-            categories.forEach(category => {
-                const option = document.createElement('option')
-                option.value = category.toLowerCase()
-                option.textContent = category
-                select.appendChild(option)
-            })
+            select.disabled = true;
+            select.innerHTML = '<option value="">Loading categories...</option>';
         }
-    })
+    });
+
+    try {
+        // Use global RAGClient instance
+        if (!window.ragClient || typeof window.ragClient.searchByCategory !== 'function') {
+            throw new Error("RAGClient not initialized or missing 'searchByCategory'");
+        }
+
+        // Fetch category list
+        const response = await window.ragClient.searchByCategory('');
+
+        if (!response.success) {
+            throw new Error(response.error || 'Failed to load categories');
+        }
+
+        // Extract categories from response
+        let categories = [];
+
+        // Try different ways to get categories based on what your backend returns
+        if (Array.isArray(response.data)) {
+            // If the response is directly an array of categories
+            categories = response.data;
+        } else if (Array.isArray(response.data.categories)) {
+            // If categories are nested under .categories
+            categories = response.data.categories;
+        } else if (Array.isArray(response.data.results)) {
+            // If categories are inside .results
+            categories = [...new Set(response.data.results.map(r => r.category).filter(Boolean))];
+        } else {
+            console.warn('Unexpected category response format:', response.data);
+        }
+
+        // Populate both dropdowns
+        [ragCategorySelect, searchCategorySelect].forEach(select => {
+            if (select) {
+                const firstOption = select.querySelector('option');
+                select.innerHTML = '';
+                if (firstOption) {
+                    select.appendChild(firstOption);
+                }
+
+                categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category.toLowerCase();
+                    option.textContent = category;
+                    select.appendChild(option);
+                });
+
+                select.disabled = false;
+            }
+        });
+
+        console.log("Successfully loaded categories:", categories);
+
+    } catch (error) {
+        console.error("Error fetching categories:", error);
+
+        // Re-enable dropdowns and show error message
+        [ragCategorySelect, searchCategorySelect].forEach(select => {
+            if (select) {
+                select.disabled = false;
+                select.innerHTML = '<option value="">Error loading categories</option>';
+            }
+        });
+
+        if (typeof window.showNotification === 'function') {
+            window.showNotification('Failed to load categories', 'error');
+        }
+    }
 }
+
 
 // Get current active input (for backward compatibility)
 function getCurrentActiveInput() {
@@ -1158,6 +1219,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Set up other event listeners
         setupPanelEventListeners()
+
+         loadCategoriesForPanels()
 
         // Initialize default panel
         setTimeout(() => {

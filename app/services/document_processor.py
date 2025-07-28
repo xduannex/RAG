@@ -735,32 +735,64 @@ class DocumentProcessor:
         return None
 
     def get_first_meaningful_line(self, text: str, max_words: int = 12) -> Optional[str]:
-        """Extract first meaningful line from text"""
+        """
+        Extract the first meaningful line from text, intelligently ignoring common
+        artifacts like file paths, page numbers, and conversion watermarks.
+        """
         if not text or not text.strip():
             return None
 
         lines = text.strip().split('\n')
 
         for line in lines:
-            line = line.strip()
+            cleaned_line = line.strip()
 
-            # Skip empty lines, page markers, and very short lines
-            if (len(line) < 3 or
-                    line.startswith('[Page ') or
-                    line.startswith('Page ') or
-                    re.match(r'^\d+$', line) or  # Skip page numbers
-                    len(line.split()) < 2):  # Skip single words
+            # --- Skip non-content lines ---
+            # Ignore empty or very short lines
+            if len(cleaned_line) < 4:
                 continue
 
-            # Clean up the line
-            line = re.sub(r'\s+', ' ', line)  # Normalize whitespace
-            line = re.sub(r'[^\w\s\-\.\,\!\?]', ' ', line)  # Remove special chars
+            # Ignore lines that are just numbers (like page numbers)
+            if cleaned_line.isdigit():
+                continue
 
-            # Limit to max_words
-            words = line.split()[:max_words]
+            # Ignore common page markers
+            if cleaned_line.lower().startswith(('[page', 'page ')):
+                continue
+
+            # Ignore lines that look like file paths (Windows or Unix)
+            # This is the key fix for the reported issue.
+            if re.match(r'^[a-zA-Z]:\\', cleaned_line) or re.match(r'^/', cleaned_line):
+                logger.debug(f"Skipping potential file path as title: '{cleaned_line}'")
+                continue
+
+            # Ignore lines containing temporary directory paths
+            if 'appdata\\local\\temp' in cleaned_line.lower() or '/tmp/' in cleaned_line.lower():
+                logger.debug(f"Skipping temporary path as title: '{cleaned_line}'")
+                continue
+
+            # Ignore common conversion watermarks
+            if 'converted with' in cleaned_line.lower() or 'libreoffice' in cleaned_line.lower():
+                logger.debug(f"Skipping converter watermark as title: '{cleaned_line}'")
+                continue
+
+            # Ignore lines that are likely just metadata or artifacts
+            if len(cleaned_line.split()) < 2 and len(
+                    cleaned_line) > 40:  # A single very long word is likely not a title
+                continue
+
+            # --- Process the candidate line ---
+            # Normalize whitespace and remove most non-alphanumeric characters
+            # but keep some punctuation that might be in a title.
+            processed_line = re.sub(r'\s+', ' ', cleaned_line)
+            processed_line = re.sub(r'[^\w\s\-\.\,\(\)]', '', processed_line)  # Keep more chars
+
+            # Limit to a reasonable number of words for a title
+            words = processed_line.split()[:max_words]
             result = ' '.join(words)
 
-            if len(result) >= 5:  # Minimum length
+            # Final check for meaningfulness
+            if len(result) >= 5:
                 return result
 
         return None
