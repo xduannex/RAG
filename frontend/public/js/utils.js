@@ -47,15 +47,14 @@ window.safeLocalStorage = {
 // Connection checker
 window.checkConnection = async function() {
     try {
-        const response = await fetch(`${window.API_BASE_URL}/health`, {
+        const response = await fetch('/health', {
             method: 'GET',
-            timeout: 5000
+            cache: 'no-cache'
         });
 
         const isConnected = response.ok;
         window.isConnected = isConnected;
 
-        // Update connection indicator
         const indicator = document.getElementById('connectionIndicator');
         const statusText = document.getElementById('statusText');
         const statusDot = document.getElementById('statusDot');
@@ -75,7 +74,6 @@ window.checkConnection = async function() {
         console.warn('Connection check failed:', error);
         window.isConnected = false;
 
-        // Update UI to show disconnected state
         const indicator = document.getElementById('connectionIndicator');
         const statusText = document.getElementById('statusText');
 
@@ -87,7 +85,6 @@ window.checkConnection = async function() {
         return false;
     }
 };
-
 // Debounce function
 window.debounce = function(func, wait, immediate) {
     let timeout;

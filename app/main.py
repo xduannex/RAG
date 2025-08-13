@@ -291,16 +291,16 @@ async def lifespan(app: FastAPI):
 
     logger.info("✅ Application shutdown completed")
 
-
+IS_DEBUG = settings.debug
 app = FastAPI(
     title="RAG Document Search API",
     version="1.0.0",
     description="Universal document search API supporting PDF, images, text files, and more",
-    docs_url=None,  # Disables Swagger UI
-    redoc_url=None,  # Disables ReDoc
-    openapi_url=None,  # Disables OpenAPI schema at /openapi.json
+    # Conditionally enable docs based on the environment for better security
+    docs_url="/docs" if IS_DEBUG else None,
+    redoc_url="/redoc" if IS_DEBUG else None,
+    openapi_url="/openapi.json" if IS_DEBUG else None,
     lifespan=lifespan
-
 )
 
 # Enhanced CORS middleware for network access
@@ -318,23 +318,13 @@ app.add_middleware(
         "http://192.168.1.*:3000",
         "http://192.168.0.*:3000",
         "http://10.0.0.*:3000",
+
         # Allow all origins for development (remove in production)
         "*"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-    allow_headers=[
-        "Accept",
-        "Accept-Language",
-        "Content-Language",
-        "Content-Type",
-        "Authorization",
-        "X-Requested-With",
-        "Origin",
-        "Cache-Control",
-        "Pragma",
-        "X-Custom-Header"
-    ],
+    allow_headers=["*"],
     expose_headers=["*"],
 )
 
@@ -365,9 +355,12 @@ async def cors_handler(request, call_next):
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request, call_next):
-    logger.info(f"Request: {request.method} {request.url} from {request.client.host if request.client else 'unknown'}")
+    # ... (your logging logic here)
+    if "/health" not in str(request.url):
+        logger.info(f"Request: {request.method} {request.url} from {request.client.host if request.client else 'unknown'}")
     response = await call_next(request)
-    logger.info(f"Response: {response.status_code}")
+    if "/health" not in str(request.url):
+        logger.info(f"Response: {response.status_code}")
     return response
 
 

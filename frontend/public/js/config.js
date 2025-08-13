@@ -2,37 +2,21 @@
 
 // Dynamic base URL configuration - SINGLE SOURCE OF TRUTH
 function getBaseUrl() {
-    const currentHost = window.location.hostname;
-    const currentProtocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const port = window.location.port;
 
-    // Check for URL parameter override
-    const envApiUrl = window.location.search.includes('api_url=')
-        ? new URLSearchParams(window.location.search).get('api_url')
-        : null;
-
-    if (envApiUrl) {
-        return envApiUrl;
-    }
-
-    // Check if we're on localhost/127.0.0.1 (true development)
-    const isLocalhost = currentHost === 'localhost' || currentHost === '127.0.0.1';
-
-    // Check if we're on a local network IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-    const isLocalNetwork = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(currentHost);
-
-    // For localhost, use localhost for API
-    if (isLocalhost) {
+    // This condition checks if you are running on your local machine for development.
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port !== '8000') {
+        console.log('Detected local development environment. API calls will target http://localhost:8000');
         return 'http://localhost:8000';
     }
 
-    // For local network IPs, use same IP with API port
-    if (isLocalNetwork) {
-        return `${currentProtocol}//${currentHost}:8000`;
-    }
-
-    // For production, use same host with API port
-    return `${currentProtocol}//${currentHost}:8000`;
+    // For all other cases (like accessing via 192.168.1.252 or a real domain),
+    // return an empty string. This makes all API calls relative to the current domain
+    // (e.g., /search/rag), and the reverse proxy will handle routing.
+    return '';
 }
+
 
 // Initialize base URL immediately - UNIFIED SOURCE
 window.API_BASE_URL = getBaseUrl();
@@ -40,7 +24,7 @@ window.API_BASE_URL = getBaseUrl();
 window.APP_CONFIG = {
     // API Configuration
     auth: {
-        accessKey: 'eliterag2025', // CHANGE THIS TO YOUR DESIRED ACCESS KEY
+        baseUrl: window.API_BASE_URL, // CHANGE THIS TO YOUR DESIRED ACCESS KEY
         sessionDuration: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
         debugMode: false, // Set to true to show access key in console
         enableAutoLogout: true, // Auto logout after session expires

@@ -2,29 +2,20 @@
 // Handles document operations and viewer functionality
 
 class DocumentManager {
-    constructor(apiBaseUrl) {
-        // Fix apiBaseUrl handling to ensure it's always a string
-        if (typeof apiBaseUrl === 'string') {
-            this.apiBaseUrl = apiBaseUrl;
-        } else if (apiBaseUrl && typeof apiBaseUrl === 'object' && apiBaseUrl.baseURL) {
-            // If passed a RAGClient object, extract the baseURL
-            this.apiBaseUrl = String(apiBaseUrl.baseURL);
-        } else if (apiBaseUrl && typeof apiBaseUrl === 'object' && apiBaseUrl.apiBaseUrl) {
-            // If passed another manager object, extract apiBaseUrl
-            this.apiBaseUrl = String(apiBaseUrl.apiBaseUrl);
+    constructor(ragClientInstance) {
+        // Always expect the ragClient instance for consistency.
+        if (!ragClientInstance || typeof ragClientInstance.makeRequest !== 'function') {
+            console.error("DocumentManager requires a valid RAGClient instance. Please check app.js.");
+            // Create a fallback, but this indicates an issue in app.js
+            this.ragClient = new RAGClient();
         } else {
-            // Fallback to global or default
-            this.apiBaseUrl = window.API_BASE_URL || 'http://localhost:8000';
+            this.ragClient = ragClientInstance;
         }
 
-        // Ensure it's definitely a string and clean - FIX THE DOUBLE PORT ISSUE
-        this.apiBaseUrl = String(this.apiBaseUrl)
-            .replace(/\/+$/, '') // Remove trailing slashes
-            .replace(/:8000:8000/, ':8000') // Fix double port issue
-            .replace(/(:8000)+/, ':8000'); // Remove multiple :8000 occurrences
+        // The only source for the URL is now the client.
+        this.apiBaseUrl = this.ragClient.baseURL;
+        console.log('DocumentManager initialized. Using base URL from RAGClient:', `"${this.apiBaseUrl}"`);
 
-        console.log('DocumentManager created with API base URL:', this.apiBaseUrl);
-        console.log('API base URL type:', typeof this.apiBaseUrl);
         this.documents = []
         this.currentDocument = null
         this.isLoading = false

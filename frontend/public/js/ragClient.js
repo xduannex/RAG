@@ -2,15 +2,25 @@
 // Frontend client for communicating with the RAG API
 
 class RAGClient {
-    constructor(baseURL = null) {
-        this.baseURL = baseURL || window.API_BASE_URL || 'http://localhost:8000';
+     constructor(baseURL = null) {
+        // Correctly handle the baseURL. Prioritize the passed argument, then the global config.
+        // An empty string is a valid value for relative paths and should not be overridden.
+        if (baseURL !== null) {
+            this.baseURL = baseURL;
+        } else if (typeof window.API_BASE_URL !== 'undefined') {
+            this.baseURL = window.API_BASE_URL;
+        } else {
+            // This fallback is only used if the global config is missing entirely.
+            this.baseURL = 'http://localhost:8000';
+        }
+
         this.timeout = 60000; // 60 seconds default
         this.retryAttempts = 3;
         this.retryDelay = 1000;
 
-        console.log('RAGClient initialized with base URL:', this.baseURL);
+        // Use quotes in the log to make an empty string visible.
+        console.log('RAGClient initialized with base URL:', `"${this.baseURL}"`);
     }
-
     // Helper method to make HTTP requests with retry logic
     async makeRequest(url, options = {}) {
         const fullUrl = url.startsWith('http') ? url : `${this.baseURL}${url}`;
@@ -951,8 +961,9 @@ class RAGClient {
 
 // Initialize global RAGClient instance
 function initializeRAGClient() {
-    const baseURL = window.API_BASE_URL || 'http://localhost:8000';
-    window.ragClient = new RAGClient(baseURL);
+    const baseURL = window.API_BASE_URL ?? 'http://localhost:8000';
+
+     window.ragClient = new RAGClient(baseURL);
 
     console.log('Global RAGClient initialized');
 

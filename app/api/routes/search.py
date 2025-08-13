@@ -36,7 +36,7 @@ class RAGRequest(BaseModel):
     query: str
     n_results: Optional[int] = 5
     max_results: Optional[int] = 5  # Added for backward compatibility
-    model: Optional[str] = "qwen2.5vl:7b-q8_0"
+    model: Optional[str] = "deepseek-r1:8b"
     pdf_ids: Optional[List[int]] = None
     document_ids: Optional[List[int]] = None  # Added for document IDs
     similarity_threshold: Optional[float] = 0.3

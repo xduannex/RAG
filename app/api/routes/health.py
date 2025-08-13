@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("")
 @router.get("/")
 async def health_check():
     """Simple health check endpoint"""

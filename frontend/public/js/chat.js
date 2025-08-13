@@ -2,27 +2,18 @@
 // Handles chat interface, message sending, and RAG responses with elegant animations
 
 class ChatManager {
-    constructor(apiBaseUrlOrClient) {
-        // Ensure apiBaseUrl is properly set with fallbacks
-        this.apiBaseUrl = apiBaseUrlOrClient || window.API_BASE_URL || 'http://localhost:8000';
-
-        console.log('ChatManager API Base URL:', this.apiBaseUrl);
-
-        if (typeof apiBaseUrlOrClient === 'string') {
-            this.apiBaseUrl = apiBaseUrlOrClient;
-        } else if (apiBaseUrlOrClient && typeof apiBaseUrlOrClient === 'object' && apiBaseUrlOrClient.baseURL) {
-            // Extract baseURL string from RAGClient object
-            this.apiBaseUrl = String(apiBaseUrlOrClient.baseURL);
-            this.ragClient = apiBaseUrlOrClient;
+    constructor(ragClientInstance) {
+        // Always expect the ragClient instance.
+        if (!ragClientInstance || typeof ragClientInstance.makeRequest !== 'function') {
+            console.error("ChatManager requires a valid RAGClient instance. Please check app.js.");
+            this.ragClient = new RAGClient();
         } else {
-            this.apiBaseUrl = 'http://localhost:8000';
+            this.ragClient = ragClientInstance;
         }
 
-        // Force ensure it's a string, not an object
-        this.apiBaseUrl = String(this.apiBaseUrl);
-
-        console.log('ChatManager API Base URL (final):', this.apiBaseUrl);
-        console.log('Type check:', typeof this.apiBaseUrl);
+        // The only source for the URL is now the client.
+        this.apiBaseUrl = this.ragClient.baseURL;
+        console.log('ChatManager initialized. Using base URL from RAGClient:', `"${this.apiBaseUrl}"`);
 
         this.chatContainer = null;
         this.messageInput = null;
@@ -558,7 +549,7 @@ async sendLocalRAGQuery(query) {
         contentElement.style.wordBreak = 'normal';
 
         let currentIndex = 0;
-        const typingSpeed = 5;
+        const typingSpeed = 1;
 
         // Clean the text
         const cleanText = fullContent

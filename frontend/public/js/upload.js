@@ -202,13 +202,13 @@ class UploadManager {
 
 // CRITICAL FIX: Wrap initialization in a DOMContentLoaded listener.
 // This ensures that this code runs only after ragClient.js has created window.ragClient.
-document.addEventListener('DOMContentLoaded', () => {
-    if (window.ragClient) {
-        if (!window.uploadManager) {
-            window.uploadManager = new UploadManager(window.ragClient);
-        }
-    } else {
-        console.error('RAG Client not found. UploadManager could not be initialized.');
-    }
-    setTimeout(initializeUploadManager, 100);
-});
+// document.addEventListener('DOMContentLoaded', () => {
+//     if (window.ragClient) {
+//         if (!window.uploadManager) {
+//             window.uploadManager = new UploadManager(window.ragClient);
+//         }
+//     } else {
+//         console.error('RAG Client not found. UploadManager could not be initialized.');
+//     }
+//     setTimeout(initializeUploadManager, 100);
+// });

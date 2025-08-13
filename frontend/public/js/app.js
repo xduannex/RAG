@@ -3,10 +3,10 @@
 
 class RAGApplication {
     constructor() {
-        this.apiBaseUrl = window.APP_CONFIG?.api?.baseUrl || 'http://localhost:8000';
-        this.isOnline = navigator.onLine;
-        this.connectionStatus = 'disconnected';
-        this.managers = {};
+        this.apiBaseUrl = window.APP_CONFIG?.api?.baseUrl ?? 'http://localhost:8000';
+         this.isOnline = navigator.onLine;
+         this.connectionStatus = 'disconnected';
+         this.managers = {};
         this.ragClient = window.ragClient;
 
         try {

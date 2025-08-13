@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from openai.resources.containers.files import content
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import openai
@@ -91,13 +92,21 @@ async def get_rag_context(message: str, config: OpenAIRAGConfig) -> Dict[str, An
         sources = []
 
         for result in search_results:
-            context_chunks.append(result.get('content', ''))
+            # Get the content from the current search result
+            chunk_content = result.get('content', '')
+
+            # Add the text content to the context for the LLM
+            context_chunks.append(chunk_content)
+
+            # Add the source information, including the content for the UI preview
             sources.append({
+                'document_id': result.get('document_id'),
                 'title': result.get('title', 'Unknown'),
                 'file_path': result.get('file_path', ''),
                 'chunk_id': result.get('chunk_id', ''),
                 'similarity_score': result.get('similarity_score', 0.0),
-                'page_number': result.get('page_number', None)
+                'page_number': result.get('page_number', None),
+                'content': chunk_content  # This provides the text for the preview
             })
 
         context = '\n\n'.join(context_chunks)
